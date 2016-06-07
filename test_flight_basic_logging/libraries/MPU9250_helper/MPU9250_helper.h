@@ -8,13 +8,43 @@
 #include "Arduino.h"
 
 // Register definitions
-#if ADO
-#define MPU9250_ADDRESS 0x69  // Device address when ADO = 1
-#else
-#define MPU9250_ADDRESS 0x68  // Device address when ADO = 0
-#define AK8963_ADDRESS 0x0C   //  Address of magnetometer
-#endif
 
+// See also MPU-9250 Register Map and Descriptions, Revision 4.0, RM-MPU-9250A-00, Rev. 1.4, 9/9/2013 for registers not listed in
+// above document; the MPU9250 and MPU9150 are virtually identical but the latter has a different register map
+//
+
+//Magnetometer Registers
+#define AK8963_ADDRESS   0x0C
+#define WHO_AM_I_AK8963  0x00 // should return 0x48
+#define INFO             0x01
+#define AK8963_ST1       0x02  // data ready status bit 0
+#define AK8963_XOUT_L	 0x03  // data
+#define AK8963_XOUT_H	 0x04
+#define AK8963_YOUT_L	 0x05
+#define AK8963_YOUT_H	 0x06
+#define AK8963_ZOUT_L	 0x07
+#define AK8963_ZOUT_H	 0x08
+#define AK8963_ST2       0x09  // Data overflow bit 3 and data read error status bit 2
+#define AK8963_CNTL      0x0A  // Power down (0000), single-measurement (0001), self-test (1000) and Fuse ROM (1111) modes on bits 3:0
+#define AK8963_ASTC      0x0C  // Self test control
+#define AK8963_I2CDIS    0x0F  // I2C disable
+#define AK8963_ASAX      0x10  // Fuse ROM x-axis sensitivity adjustment value
+#define AK8963_ASAY      0x11  // Fuse ROM y-axis sensitivity adjustment value
+#define AK8963_ASAZ      0x12  // Fuse ROM z-axis sensitivity adjustment value
+
+#define SELF_TEST_X_GYRO 0x00
+#define SELF_TEST_Y_GYRO 0x01
+#define SELF_TEST_Z_GYRO 0x02
+
+/*#define X_FINE_GAIN      0x03 // [7:0] fine gain
+#define Y_FINE_GAIN      0x04
+#define Z_FINE_GAIN      0x05
+#define XA_OFFSET_H      0x06 // User-defined trim values for accelerometer
+#define XA_OFFSET_L_TC   0x07
+#define YA_OFFSET_H      0x08
+#define YA_OFFSET_L_TC   0x09
+#define ZA_OFFSET_H      0x0A
+#define ZA_OFFSET_L_TC   0x0B */
 
 #define SELF_TEST_X_ACCEL 0x0D
 #define SELF_TEST_Y_ACCEL 0x0E
@@ -129,6 +159,16 @@
 #define ZA_OFFSET_H      0x7D
 #define ZA_OFFSET_L      0x7E
 
+// Using the MSENSR-9250 breakout board, ADO is set to 0
+// Seven-bit device address is 110100 for ADO = 0 and 110101 for ADO = 1
+//#define ADO 0
+#if ADO
+#define MPU9250_ADDRESS 0x69  // Device address when ADO = 1
+#else
+#define MPU9250_ADDRESS 0x68  // Device address when ADO = 0
+#define AK8963_ADDRESS 0x0C   //  Address of magnetometer
+#endif
+
 #define AFS_2G           0
 #define AFS_4G           1
 #define AFS_8G           2
@@ -150,6 +190,7 @@ class MPU9250_helper
     MPU9250_helper(uint8_t AScale, uint8_t GScale, uint8_t MScale, uint8_t Mmode);
     // init and basic helpers
     void initMPU9250();
+    void calibrateMPU9250(float * dest1, float * dest2);
 
     // utility functions
     void writeByte(uint8_t address, uint8_t subAddress, uint8_t data);

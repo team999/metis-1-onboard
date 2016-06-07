@@ -39,6 +39,9 @@ int16_t accelCount[3];
 float aRes;
 float ax,ay,az;
 
+// Biases resulting from calibration
+float gyroBias[3] = {0, 0, 0}, accelBias[3] = {0, 0, 0};
+
 MPU9250_helper helper(Ascale, Gscale, Mscale, Mmode);
 
 void setup() {
@@ -46,13 +49,9 @@ void setup() {
   Serial.begin(115200);
 
   while(!Serial.available()){}
-  
-  Serial.println("Reading whoami byte (using wire1)");
-  byte c = helper.readByte(MPU9250_ADDRESS, WHO_AM_I_MPU9250);  // Read WHO_AM_I register for MPU-9250
-  
-  Serial.print("MPU9250 "); Serial.print("I AM "); Serial.print(c, HEX); Serial.print(" I should be "); Serial.println(0x71, HEX);
 
-  helper.initMPU9250(); 
+  setupMPU9250();
+  setupAK8963();  
 }
 
 void loop() {
@@ -63,9 +62,37 @@ void loop() {
   ay = (float)accelCount[1]*aRes;
   az = (float)accelCount[2]*aRes; 
 
-  Serial.print("X: "); Serial.print(ax, DEC); 
-  Serial.print(" Y: "); Serial.print(ay, DEC); 
-  Serial.print(" Z: "); Serial.println(az, DEC); 
+  //Serial.print("X: "); Serial.print(ax, DEC); 
+  //Serial.print(" Y: "); Serial.print(ay, DEC); 
+  //Serial.print(" Z: "); Serial.println(az, DEC); 
 }
 
+void setupMPU9250() {
+  Serial.println("Reading whoami byte of MPU9250");
+  byte c = helper.readByte(MPU9250_ADDRESS, WHO_AM_I_MPU9250);  // Read WHO_AM_I register for MPU-9250
+  
+  Serial.print("MPU9250 "); Serial.print("I AM "); Serial.print(c, HEX); Serial.print(", I should be "); Serial.println(0x71, HEX);
+
+  if (c == 0x71) {
+    Serial.println("MPU9250 online");
+    Serial.println("Calibrating...");
+
+    helper.calibrateMPU9250(gyroBias, accelBias);
+
+    Serial.println("Accelerometer bias: (mg)"); 
+    Serial.println("X: " + (String)(1000*accelBias[0]) + " Y: " + (String)(1000*accelBias[1]) + " Z: " + (String)(1000*accelBias[2]));
+
+    Serial.println("Gyro bias: (o/s)"); 
+    Serial.println("X: " + (String)gyroBias[0] + " Y: " + (String)gyroBias[1] + " Z: " + (String)gyroBias[2]);
+
+    helper.initMPU9250(); 
+    Serial.println("\nMPU9250 initialized for active data mode....\n");
+  }
+}
+
+void setupAK8963() {
+  Serial.println("Reading whoami byte of magnetometer");
+  byte d = helper.readByte(AK8963_ADDRESS, WHO_AM_I_AK8963);  // Read WHO_AM_I register for AK8963
+  Serial.print("AK8963 "); Serial.print("I AM "); Serial.print(d, HEX); Serial.print(", I should be "); Serial.println(0x48, HEX);
+}
 
