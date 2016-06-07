@@ -2,34 +2,11 @@
 #include "MPU9250_helper.h"
 #include "i2c_t3.h"
 
-// Set initial input parameters
-enum Ascale {
-  AFS_2G = 0,
-  AFS_4G,
-  AFS_8G,
-  AFS_16G
-};
-
-enum Gscale {
-  GFS_250DPS = 0,
-  GFS_500DPS,
-  GFS_1000DPS,
-  GFS_2000DPS
-};
-
-enum Mscale {
-  MFS_14BITS = 0, // 0.6 mG per LSB
-  MFS_16BITS      // 0.15 mG per LSB
-};
-
-uint8_t Gscale = GFS_250DPS;
-uint8_t Ascale = AFS_8G;
-uint8_t Mscale = MFS_16BITS; // Choose either 14-bit or 16-bit magnetometer resolution
-uint8_t Mmode = 0x02;        // 2 for 8 Hz, 6 for 100 Hz continuous magnetometer data read
-
-
-MPU9250_helper::MPU9250_helper(){
-
+MPU9250_helper::MPU9250_helper(uint8_t AScale, uint8_t GScale, uint8_t MScale, uint8_t Mmode){
+  _gscale = GScale;
+  _ascale = AScale;
+  _mscale = MScale;
+  _mmode = Mmode;
 }
 
 void MPU9250_helper::initMPU9250()
@@ -61,7 +38,7 @@ void MPU9250_helper::initMPU9250()
  // c = c & ~0xE0; // Clear self-test bits [7:5]
   c = c & ~0x02; // Clear Fchoice bits [1:0]
   c = c & ~0x18; // Clear AFS bits [4:3]
-  c = c | Gscale << 3; // Set full scale range for the gyro
+  c = c | _gscale << 3; // Set full scale range for the gyro
  // c =| 0x00; // Set Fchoice for the gyro to 11 by writing its inverse to bits 1:0 of GYRO_CONFIG
   writeByte(MPU9250_ADDRESS, GYRO_CONFIG, c ); // Write new GYRO_CONFIG value to register
 
@@ -69,7 +46,7 @@ void MPU9250_helper::initMPU9250()
   c = readByte(MPU9250_ADDRESS, ACCEL_CONFIG); // get current ACCEL_CONFIG register value
  // c = c & ~0xE0; // Clear self-test bits [7:5]
   c = c & ~0x18;  // Clear AFS bits [4:3]
-  c = c | Ascale << 3; // Set full scale range for the accelerometer
+  c = c | _ascale << 3; // Set full scale range for the accelerometer
   writeByte(MPU9250_ADDRESS, ACCEL_CONFIG, c); // Write new ACCEL_CONFIG register value
 
  // Set accelerometer sample rate configuration
@@ -90,15 +67,6 @@ void MPU9250_helper::initMPU9250()
    writeByte(MPU9250_ADDRESS, INT_PIN_CFG, 0x22);
    writeByte(MPU9250_ADDRESS, INT_ENABLE, 0x01);  // Enable data ready (bit 0) interrupt
    delay(100);
-}
-
-void MPU9250_helper::waitForInput()
-{
-  while(!Serial.available()){};
-
-  while(Serial.available()){
-   Serial.read();
-  };
 }
 
 void MPU9250_helper::writeByte(uint8_t address, uint8_t subAddress, uint8_t data)
@@ -144,7 +112,7 @@ void MPU9250_helper::readAccelData(int16_t * destination)
 
 float MPU9250_helper::getAccelRes()
 {
-  switch (Ascale)
+  switch (_ascale)
   {
    // Possible accelerometer scales (and their register bit settings) are:
   // 2 Gs (00), 4 Gs (01), 8 Gs (10), and 16 Gs  (11).

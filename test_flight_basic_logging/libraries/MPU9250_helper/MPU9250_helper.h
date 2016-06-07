@@ -129,15 +129,27 @@
 #define ZA_OFFSET_H      0x7D
 #define ZA_OFFSET_L      0x7E
 
+#define AFS_2G           0
+#define AFS_4G           1
+#define AFS_8G           2
+#define AFS_16G          3
+
+#define GFS_250DPS       0
+#define GFS_500DPS       1
+#define GFS_1000DPS      2
+#define GFS_2000DPS      3
+
+#define MFS_14BITS       0
+#define MFS_16BITS       1
+
 // Library function prototypes
 
 class MPU9250_helper
 {
   public:
-    MPU9250_helper();
+    MPU9250_helper(uint8_t AScale, uint8_t GScale, uint8_t MScale, uint8_t Mmode);
     // init and basic helpers
     void initMPU9250();
-    void waitForInput();
 
     // utility functions
     void writeByte(uint8_t address, uint8_t subAddress, uint8_t data);
@@ -147,6 +159,8 @@ class MPU9250_helper
     // data specific functions
     void readAccelData(int16_t * destination);
     float getAccelRes();
+  private:
+    uint8_t _ascale, _gscale, _mscale, _mmode;
 };
 
 #endif

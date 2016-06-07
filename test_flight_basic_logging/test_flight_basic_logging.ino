@@ -28,41 +28,44 @@
 #include <SPI.h>
 #include <MPU9250_helper.h>
 
-int16_t accelCount[3];  // Stores the 16-bit signed accelerometer sensor output
+// Defining the scaling of sensor values
+int8_t Ascale = AFS_16G;
+int8_t Gscale = GFS_250DPS;
+int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
+int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
+
+// Stores the 16-bit signed accelerometer sensor output
+int16_t accelCount[3]; 
 float aRes;
 float ax,ay,az;
 
-MPU9250_helper sensor_helper;
+MPU9250_helper helper(Ascale, Gscale, Mscale, Mmode);
 
 void setup() {
   Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_29_30, I2C_PULLUP_EXT, I2C_RATE_400);
-  Serial.begin(38400);
+  Serial.begin(115200);
 
-  sensor_helper.waitForInput();
-
+  while(!Serial.available()){}
+  
   Serial.println("Reading whoami byte (using wire1)");
-  byte c = sensor_helper.readByte(MPU9250_ADDRESS, WHO_AM_I_MPU9250);  // Read WHO_AM_I register for MPU-9250
+  byte c = helper.readByte(MPU9250_ADDRESS, WHO_AM_I_MPU9250);  // Read WHO_AM_I register for MPU-9250
   
   Serial.print("MPU9250 "); Serial.print("I AM "); Serial.print(c, HEX); Serial.print(" I should be "); Serial.println(0x71, HEX);
 
-  delay(1000);
-  sensor_helper.initMPU9250(); 
+  helper.initMPU9250(); 
 }
 
 void loop() {
-  sensor_helper.readAccelData(accelCount);  // Read the x/y/z adc values
-  aRes = sensor_helper.getAccelRes();
+  helper.readAccelData(accelCount);  // Read the x/y/z adc values
+  aRes = helper.getAccelRes();
   
-  // Now we'll calculate the accleration value into actual g's
-  ax = (float)accelCount[0]*aRes; // - accelBias[0];  // get actual g value, this depends on scale being set
-  ay = (float)accelCount[1]*aRes; // - accelBias[1];   
-  az = (float)accelCount[2]*aRes; // - accelBias[2];  
+  ax = (float)accelCount[0]*aRes;
+  ay = (float)accelCount[1]*aRes;
+  az = (float)accelCount[2]*aRes; 
 
   Serial.print("X: "); Serial.print(ax, DEC); 
   Serial.print(" Y: "); Serial.print(ay, DEC); 
   Serial.print(" Z: "); Serial.println(az, DEC); 
-
-  delay(100);
 }
 
 
