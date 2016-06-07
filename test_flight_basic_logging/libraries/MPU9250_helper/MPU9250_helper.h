@@ -190,6 +190,7 @@ class MPU9250_helper
     MPU9250_helper(uint8_t AScale, uint8_t GScale, uint8_t MScale, uint8_t Mmode);
     // init and basic helpers
     void initMPU9250();
+    void initAK8963(float * destination);
     void calibrateMPU9250(float * dest1, float * dest2);
 
     // utility functions
@@ -200,6 +201,7 @@ class MPU9250_helper
     // data specific functions
     void readAccelData(int16_t * destination);
     float getAccelRes();
+
   private:
     uint8_t _ascale, _gscale, _mscale, _mmode;
 };

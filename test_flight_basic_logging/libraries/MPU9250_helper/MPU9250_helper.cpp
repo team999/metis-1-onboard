@@ -9,6 +9,27 @@ MPU9250_helper::MPU9250_helper(uint8_t AScale, uint8_t GScale, uint8_t MScale, u
   _mmode = Mmode;
 }
 
+void MPU9250_helper::initAK8963(float * destination)
+{
+  // First extract the factory calibration for each magnetometer axis
+  uint8_t rawData[3];  // x/y/z gyro calibration data stored here
+  writeByte(AK8963_ADDRESS, AK8963_CNTL, 0x00); // Power down magnetometer
+  delay(10);
+  writeByte(AK8963_ADDRESS, AK8963_CNTL, 0x0F); // Enter Fuse ROM access mode
+  delay(10);
+  readBytes(AK8963_ADDRESS, AK8963_ASAX, 3, &rawData[0]);  // Read the x-, y-, and z-axis calibration values
+  destination[0] =  (float)(rawData[0] - 128)/256. + 1.;   // Return x-axis sensitivity adjustment values, etc.
+  destination[1] =  (float)(rawData[1] - 128)/256. + 1.;
+  destination[2] =  (float)(rawData[2] - 128)/256. + 1.;
+  writeByte(AK8963_ADDRESS, AK8963_CNTL, 0x00); // Power down magnetometer
+  delay(10);
+  // Configure the magnetometer for continuous read and highest resolution
+  // set Mscale bit 4 to 1 (0) to enable 16 (14) bit resolution in CNTL register,
+  // and enable continuous mode data acquisition Mmode (bits [3:0]), 0010 for 8 Hz and 0110 for 100 Hz sample rates
+  writeByte(AK8963_ADDRESS, AK8963_CNTL, _mscale << 4 | _mmode); // Set magnetometer data resolution and sample ODR
+  delay(10);
+}
+
 void MPU9250_helper::initMPU9250()
 {
   // wake up device
@@ -243,8 +264,8 @@ uint8_t MPU9250_helper::readByte(uint8_t address, uint8_t subAddress)
   uint8_t data; // `data` will store the register data
   Wire1.beginTransmission(address);         // Initialize the Tx buffer
   Wire1.write(subAddress);                  // Put slave register address in Tx buffer
-  Wire1.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
-  Wire1.requestFrom(address, (size_t) 1);  // Read one byte from slave register address
+  Wire1.endTransmission(I2C_NOSTOP, 50);        // Send the Tx buffer, but send a restart to keep connection alive
+  Wire1.requestFrom(address, (size_t) 1, 50);  // Read one byte from slave register address
   data = Wire1.read();                      // Fill Rx buffer with result
   return data;                             // Return data read from slave register
 }

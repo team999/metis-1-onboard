@@ -41,6 +41,7 @@ float ax,ay,az;
 
 // Biases resulting from calibration
 float gyroBias[3] = {0, 0, 0}, accelBias[3] = {0, 0, 0};
+float magCalibration[3] = {0, 0, 0}, magbias[3] = {0, 0, 0};
 
 MPU9250_helper helper(Ascale, Gscale, Mscale, Mmode);
 
@@ -68,14 +69,14 @@ void loop() {
 }
 
 void setupMPU9250() {
-  Serial.println("Reading whoami byte of MPU9250");
+  Serial.println("Reading who-am-i byte of MPU9250");
   byte c = helper.readByte(MPU9250_ADDRESS, WHO_AM_I_MPU9250);  // Read WHO_AM_I register for MPU-9250
   
   Serial.print("MPU9250 "); Serial.print("I AM "); Serial.print(c, HEX); Serial.print(", I should be "); Serial.println(0x71, HEX);
 
   if (c == 0x71) {
     Serial.println("MPU9250 online");
-    Serial.println("Calibrating...");
+    Serial.println("Calibrating...\n");
 
     helper.calibrateMPU9250(gyroBias, accelBias);
 
@@ -91,8 +92,16 @@ void setupMPU9250() {
 }
 
 void setupAK8963() {
-  Serial.println("Reading whoami byte of magnetometer");
+  Serial.println("Reading who-am-i byte of magnetometer");
   byte d = helper.readByte(AK8963_ADDRESS, WHO_AM_I_AK8963);  // Read WHO_AM_I register for AK8963
   Serial.print("AK8963 "); Serial.print("I AM "); Serial.print(d, HEX); Serial.print(", I should be "); Serial.println(0x48, HEX);
+
+  helper.initAK8963(magCalibration); 
+
+  Serial.print("Calibrating...\n");
+  Serial.print("X-Axis sensitivity adjustment value "); Serial.println(magCalibration[0], 2);
+  Serial.print("Y-Axis sensitivity adjustment value "); Serial.println(magCalibration[1], 2);
+  Serial.print("Z-Axis sensitivity adjustment value "); Serial.println(magCalibration[2], 2);
+  Serial.println("\nAK8963 initialized for active data mode....");
 }
 
