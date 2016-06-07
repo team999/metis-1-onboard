@@ -279,13 +279,36 @@ void MPU9250_helper::readAccelData(int16_t * destination)
   destination[2] = ((int16_t)rawData[4] << 8) | rawData[5] ;
 }
 
+void MPU9250_helper::readGyroData(int16_t * destination)
+{
+  uint8_t rawData[6];  // x/y/z gyro register data stored here
+  readBytes(MPU9250_ADDRESS, GYRO_XOUT_H, 6, &rawData[0]);  // Read the six raw data registers sequentially into data array
+  destination[0] = ((int16_t)rawData[0] << 8) | rawData[1] ;  // Turn the MSB and LSB into a signed 16-bit value
+  destination[1] = ((int16_t)rawData[2] << 8) | rawData[3] ;
+  destination[2] = ((int16_t)rawData[4] << 8) | rawData[5] ;
+}
+
+void MPU9250_helper::readMagData(int16_t * destination)
+{
+  uint8_t rawData[7];  // x/y/z gyro register data, ST2 register stored here, must read ST2 at end of data acquisition
+  if(readByte(AK8963_ADDRESS, AK8963_ST1) & 0x01) { // wait for magnetometer data ready bit to be set
+  readBytes(AK8963_ADDRESS, AK8963_XOUT_L, 7, &rawData[0]);  // Read the six raw data and ST2 registers sequentially into data array
+  uint8_t c = rawData[6]; // End data read by reading ST2 register
+    if(!(c & 0x08)) { // Check if magnetic sensor overflow set, if not then report data
+    destination[0] = ((int16_t)rawData[1] << 8) | rawData[0] ;  // Turn the MSB and LSB into a signed 16-bit value
+    destination[1] = ((int16_t)rawData[3] << 8) | rawData[2] ;  // Data stored as little Endian
+    destination[2] = ((int16_t)rawData[5] << 8) | rawData[4] ;
+   }
+  }
+}
+
 float MPU9250_helper::getAccelRes()
 {
   switch (_ascale)
   {
    // Possible accelerometer scales (and their register bit settings) are:
-  // 2 Gs (00), 4 Gs (01), 8 Gs (10), and 16 Gs  (11).
-        // Here's a bit of an algorith to calculate DPS/(ADC tick) based on that 2-bit value:
+   // 2 Gs (00), 4 Gs (01), 8 Gs (10), and 16 Gs  (11).
+   // Here's a bit of an algorithm to calculate DPS/(ADC tick) based on that 2-bit value:
     case AFS_2G:
           return 2.0/32768.0;
     case AFS_4G:
@@ -294,6 +317,41 @@ float MPU9250_helper::getAccelRes()
           return 8.0/32768.0;
     case AFS_16G:
           return 16.0/32768.0;
+  }
+
+  return 0;
+}
+
+float MPU9250_helper::getGyroRes()
+{
+  switch (_gscale)
+  {
+ 	// Possible gyro scales (and their register bit settings) are:
+	// 250 DPS (00), 500 DPS (01), 1000 DPS (10), and 2000 DPS  (11).
+        // Here's a bit of an algorith to calculate DPS/(ADC tick) based on that 2-bit value:
+    case GFS_250DPS:
+          return 250.0/32768.0;
+    case GFS_500DPS:
+          return 500.0/32768.0;
+    case GFS_1000DPS:
+          return 1000.0/32768.0;
+    case GFS_2000DPS:
+          return 2000.0/32768.0;
+  }
+
+  return 0;
+}
+
+float MPU9250_helper::getMagRes()
+{
+  switch (_mscale)
+  {
+    // Possible magnetometer scales (and their register bit settings) are:
+    // 14 bit resolution (0) and 16 bit resolution (1)
+    case MFS_14BITS:
+          return 10.*4912./8190.;
+    case MFS_16BITS:
+          return 10.*4912./32760.0;
   }
 
   return 0;

@@ -34,10 +34,12 @@ int8_t Gscale = GFS_250DPS;
 int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
 int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
 
-// Stores the 16-bit signed accelerometer sensor output
-int16_t accelCount[3]; 
-float aRes;
-float ax,ay,az;
+int16_t accelCount[3];  // Stores the 16-bit signed accelerometer sensor output
+int16_t gyroCount[3];   // Stores the 16-bit signed gyro sensor output
+int16_t magCount[3];    // Stores the 16-bit signed magnetometer sensor output
+
+float aRes, gRes, mRes;
+float ax,ay,az, gx, gy, gz, mx, my, mz;
 
 // Biases resulting from calibration
 float gyroBias[3] = {0, 0, 0}, accelBias[3] = {0, 0, 0};
@@ -57,15 +59,30 @@ void setup() {
 
 void loop() {
   helper.readAccelData(accelCount);  // Read the x/y/z adc values
+  helper.readGyroData(gyroCount);
+  helper.readMagData(magCount);
+  
   aRes = helper.getAccelRes();
+  gRes = helper.getGyroRes();
+  mRes = helper.getMagRes();
   
   ax = (float)accelCount[0]*aRes;
   ay = (float)accelCount[1]*aRes;
   az = (float)accelCount[2]*aRes; 
 
-  //Serial.print("X: "); Serial.print(ax, DEC); 
-  //Serial.print(" Y: "); Serial.print(ay, DEC); 
-  //Serial.print(" Z: "); Serial.println(az, DEC); 
+  gx = (float)gyroCount[0]*gRes;
+  gy = (float)gyroCount[1]*gRes;
+  gz = (float)gyroCount[2]*gRes; 
+  
+  // Calculate the magnetometer values in milliGauss
+  // Include factory calibration per data sheet and user environmental corrections
+  mx = (float)magCount[0]*mRes*magCalibration[0] - magbias[0];  // get actual magnetometer value, this depends on scale being set
+  my = (float)magCount[1]*mRes*magCalibration[1] - magbias[1];  
+  mz = (float)magCount[2]*mRes*magCalibration[2] - magbias[2];   
+
+  Serial.print("X: "); Serial.print(ax, DEC); Serial.print(","); Serial.print(gx, DEC); Serial.print(","); Serial.print(mx,DEC); 
+  Serial.print(" Y: "); Serial.print(ay, DEC); Serial.print(","); Serial.print(gy, DEC); Serial.print(","); Serial.print(my,DEC);
+  Serial.print(" Z: "); Serial.println(az, DEC); Serial.print(","); Serial.print(gz, DEC); Serial.print(","); Serial.print(mz,DEC);
 }
 
 void setupMPU9250() {

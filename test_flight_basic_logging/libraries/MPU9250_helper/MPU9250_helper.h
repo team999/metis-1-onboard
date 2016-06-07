@@ -202,6 +202,12 @@ class MPU9250_helper
     void readAccelData(int16_t * destination);
     float getAccelRes();
 
+    void readGyroData(int16_t * destination);
+    float getGyroRes();
+
+    void readMagData(int16_t * destination);
+    float getMagRes();
+
   private:
     uint8_t _ascale, _gscale, _mscale, _mmode;
 };
