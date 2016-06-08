@@ -18,9 +18,9 @@ void MPU9250_helper::initAK8963(float * destination)
   writeByte(AK8963_ADDRESS, AK8963_CNTL, 0x0F); // Enter Fuse ROM access mode
   delay(10);
   readBytes(AK8963_ADDRESS, AK8963_ASAX, 3, &rawData[0]);  // Read the x-, y-, and z-axis calibration values
-  destination[0] =  (float)(rawData[0] - 128)/256. + 1.;   // Return x-axis sensitivity adjustment values, etc.
-  destination[1] =  (float)(rawData[1] - 128)/256. + 1.;
-  destination[2] =  (float)(rawData[2] - 128)/256. + 1.;
+  destination[0] =  (float)(rawData[0] - 128)/256.0 + 1.0;   // Return x-axis sensitivity adjustment values, etc.
+  destination[1] =  (float)(rawData[1] - 128)/256.0 + 1.0;
+  destination[2] =  (float)(rawData[2] - 128)/256.0 + 1.0;
   writeByte(AK8963_ADDRESS, AK8963_CNTL, 0x00); // Power down magnetometer
   delay(10);
   // Configure the magnetometer for continuous read and highest resolution
@@ -124,7 +124,7 @@ void MPU9250_helper::calibrateMPU9250(float * dest1, float * dest2)
   uint16_t  gyrosensitivity  = 131;   // = 131 LSB/degrees/sec
   uint16_t  accelsensitivity = 16384;  // = 16384 LSB/g
 
-    // Configure FIFO to capture accelerometer and gyro data for bias calculation
+  // Configure FIFO to capture accelerometer and gyro data for bias calculation
   writeByte(MPU9250_ADDRESS, USER_CTRL, 0x40);   // Enable FIFO
   writeByte(MPU9250_ADDRESS, FIFO_EN, 0x78);     // Enable gyro and accelerometer sensors for FIFO  (max size 512 bytes in MPU-9150)
   delay(40); // accumulate 40 samples in 40 milliseconds = 480 bytes
@@ -161,8 +161,14 @@ void MPU9250_helper::calibrateMPU9250(float * dest1, float * dest2)
   gyro_bias[1]  /= (int32_t) packet_count;
   gyro_bias[2]  /= (int32_t) packet_count;
 
-  if(accel_bias[2] > 0L) {accel_bias[2] -= (int32_t) accelsensitivity;}  // Remove gravity from the z-axis accelerometer bias calculation
-  else {accel_bias[2] += (int32_t) accelsensitivity;}
+  if(accel_bias[2] > 0L)
+  {
+    accel_bias[2] -= (int32_t) accelsensitivity;
+  }  // Remove gravity from the z-axis accelerometer bias calculation
+  else
+  {
+    accel_bias[2] += (int32_t) accelsensitivity;
+  }
 
   // Construct the gyro biases for push to the hardware gyro bias registers, which are reset to zero upon device startup
   data[0] = (-gyro_bias[0]/4  >> 8) & 0xFF; // Divide by 4 to get 32.9 LSB per deg/s to conform to expected bias input format
@@ -292,13 +298,13 @@ void MPU9250_helper::readMagData(int16_t * destination)
 {
   uint8_t rawData[7];  // x/y/z gyro register data, ST2 register stored here, must read ST2 at end of data acquisition
   if(readByte(AK8963_ADDRESS, AK8963_ST1) & 0x01) { // wait for magnetometer data ready bit to be set
-  readBytes(AK8963_ADDRESS, AK8963_XOUT_L, 7, &rawData[0]);  // Read the six raw data and ST2 registers sequentially into data array
-  uint8_t c = rawData[6]; // End data read by reading ST2 register
+    readBytes(AK8963_ADDRESS, AK8963_XOUT_L, 7, &rawData[0]);  // Read the six raw data and ST2 registers sequentially into data array
+    uint8_t c = rawData[6]; // End data read by reading ST2 register
     if(!(c & 0x08)) { // Check if magnetic sensor overflow set, if not then report data
-    destination[0] = ((int16_t)rawData[1] << 8) | rawData[0] ;  // Turn the MSB and LSB into a signed 16-bit value
-    destination[1] = ((int16_t)rawData[3] << 8) | rawData[2] ;  // Data stored as little Endian
-    destination[2] = ((int16_t)rawData[5] << 8) | rawData[4] ;
-   }
+      destination[0] = ((int16_t)rawData[1] << 8) | rawData[0] ;  // Turn the MSB and LSB into a signed 16-bit value
+      destination[1] = ((int16_t)rawData[3] << 8) | rawData[2] ;  // Data stored as little Endian
+      destination[2] = ((int16_t)rawData[5] << 8) | rawData[4] ;
+    }
   }
 }
 
@@ -317,9 +323,9 @@ float MPU9250_helper::getAccelRes()
           return 8.0/32768.0;
     case AFS_16G:
           return 16.0/32768.0;
+    default:
+          return 0;
   }
-
-  return 0;
 }
 
 float MPU9250_helper::getGyroRes()
@@ -328,7 +334,7 @@ float MPU9250_helper::getGyroRes()
   {
  	// Possible gyro scales (and their register bit settings) are:
 	// 250 DPS (00), 500 DPS (01), 1000 DPS (10), and 2000 DPS  (11).
-        // Here's a bit of an algorith to calculate DPS/(ADC tick) based on that 2-bit value:
+  // Here's a bit of an algorithm to calculate DPS/(ADC tick) based on that 2-bit value:
     case GFS_250DPS:
           return 250.0/32768.0;
     case GFS_500DPS:
@@ -337,9 +343,9 @@ float MPU9250_helper::getGyroRes()
           return 1000.0/32768.0;
     case GFS_2000DPS:
           return 2000.0/32768.0;
+    default:
+          return 0;
   }
-
-  return 0;
 }
 
 float MPU9250_helper::getMagRes()
@@ -352,7 +358,7 @@ float MPU9250_helper::getMagRes()
           return 10.*4912./8190.;
     case MFS_16BITS:
           return 10.*4912./32760.0;
+    default:
+          return 0;
   }
-
-  return 0;
 }
