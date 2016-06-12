@@ -32,6 +32,7 @@
 #include <MPU9250_helper.h>
 
 // REGION CONFIGURATION
+uint8_t OSR = ADC_8192;
 int8_t Ascale = AFS_16G;
 int8_t Gscale = GFS_250DPS;
 int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
@@ -41,9 +42,17 @@ const int sdChipSelect = 20;
 // END REGION
 
 // REGION SENSOR FIELDS
+uint16_t Pcal[8];         // calibration constants from MS5637 PROM registers
+unsigned char nCRC;       // calculated check sum to ensure PROM integrity
+uint32_t D1 = 0, D2 = 0;  // raw MS5637 pressure and temperature data
+double dT, OFFSET, SENS, T2, OFFSET2, SENS2;  // First order and second order corrections for raw S5637 temperature and pressure data
+
 int16_t accelCount[3];  // Stores the 16-bit signed accelerometer sensor output
 int16_t gyroCount[3];   // Stores the 16-bit signed gyro sensor output
 int16_t magCount[3];    // Stores the 16-bit signed magnetometer sensor output
+
+double Temperature, Pressure; // stores MS5637 pressures sensor pressure and temperature
+float altitudeOffset;
 
 float aRes, gRes, mRes;
 float ax,ay,az, gx, gy, gz, mx, my, mz;
@@ -75,10 +84,11 @@ void setup() {
   setupSD();
   setupMPU9250();
   setupAK8963();  
+  setupMS5637();
 
   // Initialise CSV columns
   isInitState = false;
-  printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,TIME\n");
+  printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,ALT,TIME,\n");
 }
 
 void loop() {
@@ -105,7 +115,8 @@ void loop() {
   mz = (float)magCount[2]*mRes*magCalibration[2] - magbias[2];   
 
   printData(getLogString(ax, ay, az)+getLogString(gx, gy, gz)+getLogString(mx, my, mz));
-  printData(String(micros()) + ",\n");
+  printData(String(getAltitude()) + "," + String(micros()) + ",\n");
+
 }
 
 void setupMPU9250() {
@@ -161,6 +172,72 @@ void setupSD() {
     initFileName = initFileName + String(fileCount) + ".log";
     dataFileName = dataFileName + String(fileCount) + ".csv";
   }
+}
+
+void setupMS5637(){
+  helper.resetMS5637();
+  delay(100);
+  printData("MS5637 pressure sensor reset...\n");
+  // Read PROM data from MS5637 pressure sensor
+  helper.readPromMS5637(Pcal);
+  printData("PROM data read:\n");
+  printData("C0 = "); printData(String(Pcal[0]) + "\n");
+  unsigned char refCRC = Pcal[0] >> 12;
+  printData("C1 = "); printData(String(Pcal[1]) + "\n");
+  printData("C2 = "); printData(String(Pcal[2]) + "\n");
+  printData("C3 = "); printData(String(Pcal[3]) + "\n");
+  printData("C4 = "); printData(String(Pcal[4]) + "\n");
+  printData("C5 = "); printData(String(Pcal[5]) + "\n");
+  printData("C6 = "); printData(String(Pcal[6]) + "\n");
+  
+  nCRC = helper.checkMS5637CRC(Pcal);  //calculate checksum to ensure integrity of MS5637 calibration data
+  printData("Checksum: " + String(nCRC) + ", should be: " + String(refCRC) + "\n");  
+
+  // Calculate offset for relative altitude
+  float altitudeTemp = 0;
+  for(int i = 0; i < 16; i++) {
+    altitudeTemp += getAltitude();
+  }
+
+  altitudeOffset = altitudeTemp/16;
+}
+
+float getAltitude(){
+  D1 = helper.MS5637Read(ADC_D1, OSR);  // get raw pressure value
+  D2 = helper.MS5637Read(ADC_D2, OSR);  // get raw temperature value
+  dT = D2 - Pcal[5]*pow(2,8);    // calculate temperature difference from reference
+  OFFSET = Pcal[2]*pow(2, 17) + dT*Pcal[4]/pow(2,6);
+  SENS = Pcal[1]*pow(2,16) + dT*Pcal[3]/pow(2,7);
+
+  Temperature = (2000 + (dT*Pcal[6])/pow(2, 23))/100;   // First-order Temperature in degrees celsius
+
+  // Second order corrections
+  if(Temperature > 20) 
+  {
+    T2 = 5*dT*dT/pow(2, 38); // correction for high temperatures
+    OFFSET2 = 0;
+    SENS2 = 0;
+  }
+  if(Temperature < 20)       // correction for low temperature
+  {
+    T2      = 3*dT*dT/pow(2, 33); 
+    OFFSET2 = 61*(100*Temperature - 2000)*(100*Temperature - 2000)/16;
+    SENS2   = 29*(100*Temperature - 2000)*(100*Temperature - 2000)/16;
+  } 
+  if(Temperature < -15)      // correction for very low temperature
+  {
+    OFFSET2 = OFFSET2 + 17*(100*Temperature + 1500)*(100*Temperature + 1500);
+    SENS2 = SENS2 + 9*(100*Temperature + 1500)*(100*Temperature + 1500);
+  }
+  // End of second order corrections
+
+  Temperature = Temperature - T2/100;
+  OFFSET = OFFSET - OFFSET2;
+  SENS = SENS - SENS2;
+
+  Pressure = (((D1*SENS)/pow(2, 21) - OFFSET)/pow(2, 15))/100;  // Pressure in mbar or kPa
+
+  return ((145366.45*(1.0 - pow((Pressure/1013.25), 0.190284)))/3.2808) - altitudeOffset; // Altitude calculation  
 }
 
 

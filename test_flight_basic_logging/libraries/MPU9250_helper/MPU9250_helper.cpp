@@ -308,6 +308,90 @@ void MPU9250_helper::readMagData(int16_t * destination)
   }
 }
 
+// Altimeter sensor region
+void MPU9250_helper::resetMS5637()
+{
+  Wire1.beginTransmission(MS5637_ADDRESS);  // Initialize the Tx buffer
+	Wire1.write(MS5637_RESET);                // Put reset command in Tx buffer
+	Wire1.endTransmission();                  // Send the Tx buffer
+}
+
+void MPU9250_helper::readPromMS5637(uint16_t * destination)
+{
+  uint8_t data[2] = {0,0};
+  for (uint8_t ii = 0; ii < 7; ii++) {
+    Wire1.beginTransmission(MS5637_ADDRESS);  // Initialize the Tx buffer
+    Wire1.write(0xA0 | ii << 1);              // Put PROM address in Tx buffer
+    Wire1.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
+	  uint8_t i = 0;
+    Wire1.requestFrom(MS5637_ADDRESS, 2);   // Read two bytes from slave PROM address
+	  while (Wire1.available()) {
+      data[i++] = Wire1.read(); }               // Put read results in the Rx buffer
+      destination[ii] = (uint16_t) (((uint16_t) data[0] << 8) | data[1]); // construct PROM data for return to main program
+  }
+}
+
+uint32_t MPU9250_helper::MS5637Read(uint8_t CMD, uint8_t OSR)
+{
+   uint8_t data[3] = {0,0,0};
+   Wire1.beginTransmission(MS5637_ADDRESS);  // Initialize the Tx buffer
+   Wire1.write(CMD | OSR);                  // Put pressure conversion command in Tx buffer
+   Wire1.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
+
+   switch (OSR)
+   {
+     case ADC_256: delay(1); break;  // delay for conversion to complete
+     case ADC_512: delay(3); break;
+     case ADC_1024: delay(4); break;
+     case ADC_2048: delay(6); break;
+     case ADC_4096: delay(10); break;
+     case ADC_8192: delay(20); break;
+   }
+
+   Wire1.beginTransmission(MS5637_ADDRESS);  // Initialize the Tx buffer
+   Wire1.write(0x00);                        // Put ADC read command in Tx buffer
+   Wire1.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
+   uint8_t i = 0;
+   Wire1.requestFrom(MS5637_ADDRESS, 3);     // Read three bytes from slave PROM address
+   while (Wire1.available()) {
+     data[i++] = Wire1.read(); // Put read results in the Rx buffer
+   }
+
+   return (uint32_t) (((uint32_t) data[0] << 16) | (uint32_t) data[1] << 8 | data[2]); // construct PROM data for return to main program
+}
+
+// Full disclosure: This function was copy-pasted from https://github.com/kriswiner/MPU-9250/blob/master/MPU9250_MS5637_AHRS_t3.ino
+// It looks extremely convoluted, but it works so whatever
+//        ,~~.
+//       (  9 )-_,
+//  (\___ )=='-'
+//   \ .   ) )
+//    \ `-' /
+//     `~j-'   hjw
+//       "=:
+unsigned char MPU9250_helper::checkMS5637CRC(uint16_t * n_prom)
+{
+  int cnt;
+  unsigned int n_rem = 0;
+  unsigned char n_bit;
+
+  n_prom[0] = ((n_prom[0]) & 0x0FFF);  // replace CRC byte by 0 for checksum calculation
+  n_prom[7] = 0;
+  for(cnt = 0; cnt < 16; cnt++)
+  {
+    if(cnt%2==1) n_rem ^= (unsigned short) ((n_prom[cnt>>1]) & 0x00FF);
+    else         n_rem ^= (unsigned short)  (n_prom[cnt>>1]>>8);
+    for(n_bit = 8; n_bit > 0; n_bit--)
+    {
+        if(n_rem & 0x8000)    n_rem = (n_rem<<1) ^ 0x3000;
+        else                  n_rem = (n_rem<<1);
+    }
+  }
+  n_rem = ((n_rem>>12) & 0x000F);
+  return (n_rem ^ 0x00);
+}
+// End region
+
 float MPU9250_helper::getAccelRes()
 {
   switch (_ascale)
