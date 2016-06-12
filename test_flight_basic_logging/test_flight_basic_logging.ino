@@ -104,9 +104,7 @@ void loop() {
   my = (float)magCount[1]*mRes*magCalibration[1] - magbias[1];  
   mz = (float)magCount[2]*mRes*magCalibration[2] - magbias[2];   
 
-  printData(getLogString(ax, ay, az));
-  printData(getLogString(gx, gy, gz));
-  printData(getLogString(mx, my, mz));
+  printData(getLogString(ax, ay, az)+getLogString(gx, gy, gz)+getLogString(mx, my, mz));
   printData(String(micros()) + ",\n");
 }
 
@@ -114,7 +112,7 @@ void setupMPU9250() {
   printData("Reading who-am-i byte of MPU9250\n");
   byte c = helper.readByte(MPU9250_ADDRESS, WHO_AM_I_MPU9250);  // Read WHO_AM_I register for MPU-9250
   
-  printData("MPU9250 "); printData("I AM "); printData(String(c, HEX)); printData(", I should be "); printData(String(0x71, HEX) + "\n");
+  printData("MPU9250 I AM "); printData(String(c, HEX)); printData(", I should be "); printData(String(0x71, HEX) + "\n");
 
   if (c == 0x71) {
     printData("MPU9250 online\n");
@@ -136,7 +134,7 @@ void setupMPU9250() {
 void setupAK8963() {
   printData("Reading who-am-i byte of magnetometer\n");
   byte d = helper.readByte(AK8963_ADDRESS, WHO_AM_I_AK8963);  // Read WHO_AM_I register for AK8963
-  printData("AK8963 "); printData("I AM "); printData(String(d, HEX)); printData(", I should be "); printData(String(0x48, HEX) + "\n");
+  printData("AK8963 I AM "); printData(String(d, HEX)); printData(", I should be "); printData(String(0x48, HEX) + "\n");
 
   helper.initAK8963(magCalibration); 
 
