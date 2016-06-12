@@ -25,7 +25,6 @@
   By Jamie Sanson
 
 */
-
 #include <i2c_t3.h>
 #include <SD.h>
 #include <SPI.h>
@@ -37,8 +36,10 @@ int8_t Ascale = AFS_16G;
 int8_t Gscale = GFS_250DPS;
 int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
 int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
+
 boolean serialDebug = true;
-const int sdChipSelect = 20;
+
+const int sdChipSelect = 10;
 // END REGION
 
 // REGION SENSOR FIELDS
@@ -91,8 +92,8 @@ void setup() {
   printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,ALT,TIME,\n");
 }
 
-void loop() {
-  helper.readAccelData(accelCount);  // Read the x/y/z adc values
+void loop() {  
+  helper.readAccelData(accelCount);
   helper.readGyroData(gyroCount);
   helper.readMagData(magCount);
   
