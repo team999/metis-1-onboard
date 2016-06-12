@@ -312,8 +312,8 @@ void MPU9250_helper::readMagData(int16_t * destination)
 void MPU9250_helper::resetMS5637()
 {
   Wire1.beginTransmission(MS5637_ADDRESS);  // Initialize the Tx buffer
-	Wire1.write(MS5637_RESET);                // Put reset command in Tx buffer
-	Wire1.endTransmission();                  // Send the Tx buffer
+  Wire1.write(MS5637_RESET);                // Put reset command in Tx buffer
+  Wire1.endTransmission();                  // Send the Tx buffer
 }
 
 void MPU9250_helper::readPromMS5637(uint16_t * destination)
@@ -323,13 +323,13 @@ void MPU9250_helper::readPromMS5637(uint16_t * destination)
     Wire1.beginTransmission(MS5637_ADDRESS);  // Initialize the Tx buffer
     Wire1.write(0xA0 | ii << 1);              // Put PROM address in Tx buffer
     Wire1.endTransmission(I2C_NOSTOP);        // Send the Tx buffer, but send a restart to keep connection alive
-	  uint8_t i = 0;
+    uint8_t i = 0;
     Wire1.requestFrom(MS5637_ADDRESS, 2);   // Read two bytes from slave PROM address
-	  while (Wire1.available()) {
+    while (Wire1.available()) {
       data[i++] = Wire1.read(); }               // Put read results in the Rx buffer
       destination[ii] = (uint16_t) (((uint16_t) data[0] << 8) | data[1]); // construct PROM data for return to main program
+    }
   }
-}
 
 uint32_t MPU9250_helper::MS5637Read(uint8_t CMD, uint8_t OSR)
 {
