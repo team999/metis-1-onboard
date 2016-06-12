@@ -4,6 +4,8 @@
   This sketch contains logic to read sensor values via I2C and dump data to an SD card
   for further analysis on landing. It also communicates basic data over the 433MHz radio band
 
+  This sketch is written for use on a Teensy 3.1/3.2
+
   The circuit:
   * Components supplying input to device:
     - 9-Axis motion sensor MPU9250 Shield
@@ -13,7 +15,7 @@
       ** MOSI - pin 11
       ** MISO - pin 12
       ** CLK - 13
-      ** CS - 4
+      ** CS - as defined in sdChipSelect field
 
 
   Created 13 May 2016
@@ -25,6 +27,7 @@
 */
 
 #include <i2c_t3.h>
+#include <SD.h>
 #include <SPI.h>
 #include <MPU9250_helper.h>
 
@@ -34,8 +37,10 @@ int8_t Gscale = GFS_250DPS;
 int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
 int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
 boolean serialDebug = true;
+const int sdChipSelect = 20;
 // END REGION
 
+// REGION SENSOR FIELDS
 int16_t accelCount[3];  // Stores the 16-bit signed accelerometer sensor output
 int16_t gyroCount[3];   // Stores the 16-bit signed gyro sensor output
 int16_t magCount[3];    // Stores the 16-bit signed magnetometer sensor output
@@ -46,6 +51,15 @@ float ax,ay,az, gx, gy, gz, mx, my, mz;
 // Biases resulting from calibration
 float gyroBias[3] = {0, 0, 0}, accelBias[3] = {0, 0, 0};
 float magCalibration[3] = {0, 0, 0}, magbias[3] = {0, 0, 0};
+// END REGION
+
+// REGION DATA LOGGING
+File datafile;
+String initFileName = "init/init";
+String dataFileName = "data/data";
+char fileNameBuffer[20];
+boolean isInitState = true;
+// END REGION
 
 MPU9250_helper helper(Ascale, Gscale, Mscale, Mmode);
 
@@ -53,12 +67,18 @@ void setup() {
   Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_29_30, I2C_PULLUP_EXT, I2C_RATE_400);
   
   if (serialDebug) {
+    // block until serial sent to micro
     Serial.begin(115200);
     while(!Serial.available()){}
   }
 
+  setupSD();
   setupMPU9250();
   setupAK8963();  
+
+  // Initialise CSV columns
+  isInitState = false;
+  printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,TIME\n");
 }
 
 void loop() {
@@ -86,9 +106,8 @@ void loop() {
 
   printData(getLogString(ax, ay, az));
   printData(getLogString(gx, gy, gz));
-  printData(getLogString(mx, my, mz) + "\n");
-  
-  //Serial.println(micros());
+  printData(getLogString(mx, my, mz));
+  printData(String(micros()) + ",\n");
 }
 
 void setupMPU9250() {
@@ -128,6 +147,25 @@ void setupAK8963() {
   printData("\nAK8963 initialized for active data mode....\n");
 }
 
+void setupSD() {
+  if (!SD.begin(sdChipSelect)) {
+    printData("Card failed to initialise\n");
+    return;
+  } else {
+    // Detect init file on card
+    // Same number of init files as there are data files
+    int fileCount = 1;
+    (initFileName + String(fileCount) + ".log").toCharArray(fileNameBuffer, 20);
+    while(SD.exists(fileNameBuffer)) {
+      fileCount += 1;
+      (initFileName + String(fileCount) + ".log").toCharArray(fileNameBuffer, 20);
+    }
+    initFileName = initFileName + String(fileCount) + ".log";
+    dataFileName = dataFileName + String(fileCount) + ".csv";
+  }
+}
+
+
 // -------------------------------------------------
 //                Utility functions
 // -------------------------------------------------
@@ -135,7 +173,14 @@ void printData(String data) {
   if (serialDebug) {
     Serial.print(data);
   } else {
-    // Add SD logging
+    if (isInitState) {
+      initFileName.toCharArray(fileNameBuffer, 20);
+    } else {
+      dataFileName.toCharArray(fileNameBuffer, 20);
+    }
+    datafile = SD.open(fileNameBuffer, FILE_WRITE);      
+    datafile.print(data);
+    datafile.close();
   }
 }
 
