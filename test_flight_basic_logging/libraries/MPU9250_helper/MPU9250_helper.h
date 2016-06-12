@@ -9,6 +9,12 @@
 
 // Register definitions
 
+// See MS5637-02BA03 Low Voltage Barometric Pressure Sensor Data Sheet
+#define MS5637_RESET      0x1E
+#define MS5637_CONVERT_D1 0x40
+#define MS5637_CONVERT_D2 0x50
+#define MS5637_ADC_READ   0x00
+
 // See also MPU-9250 Register Map and Descriptions, Revision 4.0, RM-MPU-9250A-00, Rev. 1.4, 9/9/2013 for registers not listed in
 // above document; the MPU9250 and MPU9150 are virtually identical but the latter has a different register map
 //
@@ -155,8 +161,19 @@
 #define MPU9250_ADDRESS 0x69  // Device address when ADO = 1
 #else
 #define MPU9250_ADDRESS 0x68  // Device address when ADO = 0
-#define AK8963_ADDRESS 0x0C   //  Address of magnetometer
 #endif
+
+#define AK8963_ADDRESS 0x0C   //  Address of magnetometer
+#define MS5637_ADDRESS 0x76   // Address of altimeter
+
+#define ADC_256  0x00 // define pressure and temperature conversion rates
+#define ADC_512  0x02
+#define ADC_1024 0x04
+#define ADC_2048 0x06
+#define ADC_4096 0x08
+#define ADC_8192 0x0A
+#define ADC_D1   0x40
+#define ADC_D2   0x50
 
 #define AFS_2G           0
 #define AFS_4G           1
@@ -196,6 +213,11 @@ class MPU9250_helper
 
     void readMagData(int16_t * destination);
     float getMagRes();
+
+    void resetMS5637();
+    void readPromMS5637(uint16_t * destination);
+    uint32_t MS5637Read(uint8_t CMD, uint8_t OSR);
+    unsigned char checkMS5637CRC(uint16_t * n_prom);
 
   private:
     uint8_t _ascale, _gscale, _mscale, _mmode;
