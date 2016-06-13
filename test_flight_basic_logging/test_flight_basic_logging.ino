@@ -7,15 +7,28 @@
   This sketch is written for use on a Teensy 3.1/3.2
 
   The circuit:
-  * Components supplying input to device:
+  * Components supplying input:
     - 9-Axis motion sensor MPU9250 Shield
+      * Connected to the SMT pads on the underside of the Teensy
+    - Venus GPS logger
+      * RX     - pin 7
+      * TX     - pin 8
+      * Other pins connected to independent power supplies
   * Components Outputted to:
     - BOB-00544 microSD card SPI breakout
-      * SD card attached to SPI bus as follows:
-      ** MOSI - pin 11
-      ** MISO - pin 12
-      ** CLK - 13
-      ** CS - as defined in sdChipSelect field
+      * MOSI   - pin 11
+      * MISO   - pin 12
+      * CLK    - pin 13
+      * CS     - as defined in sdChipSelect field
+    - RFM22B-S2 434MHz radio tranciever
+      * SDI    - pin 11
+      * SDO    - pin 12
+      * CLK    - pin 13
+      * CS     - as defined in radioChipSelect field
+      * SDN    - pin 17
+      * RX-ANT - pin 18
+      * TX-ANT - pin 19
+   
 
 
   Created 13 May 2016
@@ -41,6 +54,7 @@ int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
 boolean serialDebug = false;
 
 const int sdChipSelect = 10;
+const int radioChipSelect = 9;
 // END REGION
 
 // REGION SENSOR FIELDS
