@@ -1,8 +1,10 @@
 /*
   Test flight basic logging
 
-  This sketch contains logic to read sensor values via I2C and dump data to an SD card 
+  This sketch contains logic to read sensor values via I2C and dump data to an SD card
   for further analysis on landing. It also communicates basic data over the 433MHz radio band
+
+  This sketch is written for use on a Teensy 3.1/3.2
 
   The circuit:
   * Components supplying input to device:
@@ -10,24 +12,19 @@
   * Components Outputted to:
     - BOB-00544 microSD card SPI breakout
       * SD card attached to SPI bus as follows:
-      ** MOSI - pin TBD
-      ** MISO - pin TBD
-      ** CLK - pin TBD
-      ** CS - pin TBD
-    
+      ** MOSI - pin 11
+      ** MISO - pin 12
+      ** CLK - 13
+      ** CS - as defined in sdChipSelect field
+
 
   Created 13 May 2016
   By Jamie Sanson
-  
-  Modified 13 May 2016
+
+  Modified 12 June 2016
   By Jamie Sanson
 
 */
-<<<<<<< Updated upstream
-
-#include <SPI.h>
-#include <SD.h>
-=======
 #include <i2c_t3.h>
 #include <SD.h>
 #include <SD_t3.h>
@@ -41,7 +38,8 @@ int8_t Gscale = GFS_250DPS;
 int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
 int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
 
-boolean serialDebug = false;
+boolean serialDebug = true;
+
 const int sdChipSelect = 10;
 // END REGION
 
@@ -74,18 +72,10 @@ char fileNameBuffer[20];
 boolean isInitState = true;
 boolean initialiseOK = true;
 // END REGION
->>>>>>> Stashed changes
 
-const int chipSelect = 0; // Update this with chip select
-const String fileName = "flight_log.txt";
+MPU9250_helper helper(Ascale, Gscale, Mscale, Mmode);
 
 void setup() {
-<<<<<<< Updated upstream
-  // see if the card is present and can be initialized
-  if (!SD.begin(chipSelect)) {
-    // don't do anything more
-    return;
-=======
   Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_29_30, I2C_PULLUP_EXT, I2C_RATE_400);
   if (serialDebug) {
     // block until serial sent to micro
@@ -95,39 +85,39 @@ void setup() {
 
   setupSD();
   setupMPU9250();
-  setupAK8963();  
+  setupAK8963();
   setupMS5637();
 
   // Block if not initialised properly (Also set LED state)
   while (!initialiseOK);
-  
+
   // Initialise CSV columns
   isInitState = false;
   printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_Y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,ALT,TIME,\n");
 }
 
-void loop() {  
+void loop() {
   helper.readAccelData(accelCount);
   helper.readGyroData(gyroCount);
   helper.readMagData(magCount);
-  
+
   aRes = helper.getAccelRes();
   gRes = helper.getGyroRes();
   mRes = helper.getMagRes();
-  
+
   ax = (float)accelCount[0]*aRes;
   ay = (float)accelCount[1]*aRes;
-  az = (float)accelCount[2]*aRes; 
+  az = (float)accelCount[2]*aRes;
 
   gx = (float)gyroCount[0]*gRes;
   gy = (float)gyroCount[1]*gRes;
-  gz = (float)gyroCount[2]*gRes; 
-  
+  gz = (float)gyroCount[2]*gRes;
+
   // Calculate the magnetometer values in milliGauss
   // Include factory calibration per data sheet and user environmental corrections
   mx = (float)magCount[0]*mRes*magCalibration[0] - magbias[0];  // get actual magnetometer value, this depends on scale being set
-  my = (float)magCount[1]*mRes*magCalibration[1] - magbias[1];  
-  mz = (float)magCount[2]*mRes*magCalibration[2] - magbias[2];   
+  my = (float)magCount[1]*mRes*magCalibration[1] - magbias[1];
+  mz = (float)magCount[2]*mRes*magCalibration[2] - magbias[2];
 
   printData(getLogString(ax, ay, az)+getLogString(gx, gy, gz)+getLogString(mx, my, mz));
   printData(String(getAltitude()) + "," + String(micros()) + ",\n");
@@ -137,7 +127,7 @@ void loop() {
 void setupMPU9250() {
   printData("Reading who-am-i byte of MPU9250\n");
   byte c = helper.readByte(MPU9250_ADDRESS, WHO_AM_I_MPU9250);  // Read WHO_AM_I register for MPU-9250
-  
+
   printData("MPU9250 I AM "); printData(String(c, HEX)); printData(", I should be "); printData(String(0x71, HEX) + "\n");
 
   if (c == 0x71) {
@@ -146,13 +136,13 @@ void setupMPU9250() {
 
     helper.calibrateMPU9250(gyroBias, accelBias);
 
-    printData("Accelerometer bias: (mg)\n"); 
+    printData("Accelerometer bias: (mg)\n");
     printData("X: " + (String)(1000*accelBias[0]) + " Y: " + (String)(1000*accelBias[1]) + " Z: " + (String)(1000*accelBias[2]) + "\n");
 
-    printData("Gyro bias: (o/s)\n"); 
+    printData("Gyro bias: (o/s)\n");
     printData("X: " + (String)gyroBias[0] + " Y: " + (String)gyroBias[1] + " Z: " + (String)gyroBias[2] + "\n");
 
-    helper.initMPU9250(); 
+    helper.initMPU9250();
     printData("\nMPU9250 initialized for active data mode....\n\n");
   } else {
     initialiseOK = false;
@@ -170,7 +160,7 @@ void setupAK8963() {
     printData("AK8963 failed to initialise\n");
   }
 
-  helper.initAK8963(magCalibration); 
+  helper.initAK8963(magCalibration);
 
   printData("Calibrating...\n");
   printData("X-Axis sensitivity adjustment value "); printData(String(magCalibration[0], 2) + "\n");
@@ -196,15 +186,28 @@ void setupSD() {
     }
     initFileName = initFileName + String(fileCount) + ".txt";
     dataFileName = dataFileName + String(fileCount) + ".csv";
->>>>>>> Stashed changes
   }
 }
 
-void loop() {
+void setupMS5637(){
+  helper.resetMS5637();
+  delay(100);
+  printData("MS5637 pressure sensor reset...\n");
+  // Read PROM data from MS5637 pressure sensor
+  helper.readPromMS5637(Pcal);
+  printData("PROM data read:\n");
+  printData("C0 = "); printData(String(Pcal[0]) + "\n");
+  unsigned char refCRC = Pcal[0] >> 12;
+  printData("C1 = "); printData(String(Pcal[1]) + "\n");
+  printData("C2 = "); printData(String(Pcal[2]) + "\n");
+  printData("C3 = "); printData(String(Pcal[3]) + "\n");
+  printData("C4 = "); printData(String(Pcal[4]) + "\n");
+  printData("C5 = "); printData(String(Pcal[5]) + "\n");
+  printData("C6 = "); printData(String(Pcal[6]) + "\n");
 
-<<<<<<< Updated upstream
-  // Read sensors and build log string here
-=======
+  nCRC = helper.checkMS5637CRC(Pcal);  //calculate checksum to ensure integrity of MS5637 calibration data
+  printData("Checksum: " + String(nCRC) + ", should be: " + String(refCRC) + "\n");
+
   if (nCRC != refCRC) {
     initialiseOK = false;
     printData("MS5637 checksum integrity failed\n");
@@ -215,20 +218,46 @@ void loop() {
   for(int i = 0; i < 16; i++) {
     altitudeTemp += getAltitude();
   }
->>>>>>> Stashed changes
 
-  File dataFile = SD.open(fileName, FILE_WRITE);
+  altitudeOffset = altitudeTemp/16;
+}
 
-<<<<<<< Updated upstream
-  if (dataFile) { // Check to see if file is available
-    // Add formatted data here
-    dataFile.print(""); 
-    // Finalise file write
-    dataFile.close(); 
-=======
+float getAltitude(){
+  D1 = helper.MS5637Read(ADC_D1, OSR);  // get raw pressure value
+  D2 = helper.MS5637Read(ADC_D2, OSR);  // get raw temperature value
+  dT = D2 - Pcal[5]*pow(2,8);    // calculate temperature difference from reference
+  OFFSET = Pcal[2]*pow(2, 17) + dT*Pcal[4]/pow(2,6);
+  SENS = Pcal[1]*pow(2,16) + dT*Pcal[3]/pow(2,7);
+
+  Temperature = (2000 + (dT*Pcal[6])/pow(2, 23))/100;   // First-order Temperature in degrees celsius
+
+  // Second order corrections
+  if(Temperature > 20)
+  {
+    T2 = 5*dT*dT/pow(2, 38); // correction for high temperatures
+    OFFSET2 = 0;
+    SENS2 = 0;
+  }
+  if(Temperature < 20)       // correction for low temperature
+  {
+    T2      = 3*dT*dT/pow(2, 33);
+    OFFSET2 = 61*(100*Temperature - 2000)*(100*Temperature - 2000)/16;
+    SENS2   = 29*(100*Temperature - 2000)*(100*Temperature - 2000)/16;
+  }
+  if(Temperature < -15)      // correction for very low temperature
+  {
+    OFFSET2 = OFFSET2 + 17*(100*Temperature + 1500)*(100*Temperature + 1500);
+    SENS2 = SENS2 + 9*(100*Temperature + 1500)*(100*Temperature + 1500);
+  }
+  // End of second order corrections
+
+  Temperature = Temperature - T2/100;
+  OFFSET = OFFSET - OFFSET2;
+  SENS = SENS - SENS2;
+
   Pressure = (((D1*SENS)/pow(2, 21) - OFFSET)/pow(2, 15))/100;  // Pressure in mbar or kPa
 
-  return ((145366.45*(1.0 - pow((Pressure/1013.25), 0.190284)))/3.2808) - altitudeOffset; // Altitude calculation  
+  return ((145366.45*(1.0 - pow((Pressure/1013.25), 0.190284)))/3.2808) - altitudeOffset; // Altitude calculation
 }
 
 
@@ -244,11 +273,13 @@ void printData(String data) {
     } else {
       dataFileName.toCharArray(fileNameBuffer, 20);
     }
-    
-    datafile = SD.open(fileNameBuffer, FILE_WRITE); 
+
+    datafile = SD.open(fileNameBuffer, FILE_WRITE);
     datafile.print(data);
     datafile.close();
->>>>>>> Stashed changes
   }
- 
+}
+
+String getLogString(float x, float y, float z) {
+  return (String(x, DEC) + "," + String(y, DEC) + "," + String(z, DEC) + ",");
 }
