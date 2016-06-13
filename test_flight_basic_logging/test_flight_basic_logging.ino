@@ -38,7 +38,7 @@ int8_t Gscale = GFS_250DPS;
 int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
 int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
 
-boolean serialDebug = true;
+boolean serialDebug = false;
 
 const int sdChipSelect = 10;
 // END REGION
@@ -71,12 +71,20 @@ String dataFileName = "data/data";
 char fileNameBuffer[20];
 boolean isInitState = true;
 boolean initialiseOK = true;
+
+int altitudeCount = 0;
+float altitudeBuffer = 0;
+boolean altInit = false;
+
+int writeCount = 0;
+String dataBuffer = "";
 // END REGION
 
 MPU9250_helper helper(Ascale, Gscale, Mscale, Mmode);
 
 void setup() {
   Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_29_30, I2C_PULLUP_EXT, I2C_RATE_400);
+  
   if (serialDebug) {
     // block until serial sent to micro
     Serial.begin(115200);
@@ -90,7 +98,14 @@ void setup() {
 
   // Block if not initialised properly (Also set LED state)
   while (!initialiseOK);
-
+  
+  // finalise init logs
+  initFileName.toCharArray(fileNameBuffer, 20);
+  datafile = SD.open(fileNameBuffer, O_CREAT | O_WRITE);
+  datafile.print(dataBuffer);
+  datafile.close();
+  dataBuffer = "";
+  
   // Initialise CSV columns
   isInitState = false;
   printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_Y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,ALT,TIME,\n");
@@ -119,8 +134,8 @@ void loop() {
   my = (float)magCount[1]*mRes*magCalibration[1] - magbias[1];
   mz = (float)magCount[2]*mRes*magCalibration[2] - magbias[2];
 
-  printData(getLogString(ax, ay, az)+getLogString(gx, gy, gz)+getLogString(mx, my, mz));
-  printData(String(getAltitude()) + "," + String(micros()) + ",\n");
+  printData(getLogString(ax, ay, az)+getLogString(gx, gy, gz)+getLogString(mx, my, mz));\
+  printData(String(getAltitude()) + "," + String(millis()) + ",\n");
 
 }
 
@@ -220,44 +235,52 @@ void setupMS5637(){
   }
 
   altitudeOffset = altitudeTemp/16;
+  altInit = true;
 }
 
 float getAltitude(){
-  D1 = helper.MS5637Read(ADC_D1, OSR);  // get raw pressure value
-  D2 = helper.MS5637Read(ADC_D2, OSR);  // get raw temperature value
-  dT = D2 - Pcal[5]*pow(2,8);    // calculate temperature difference from reference
-  OFFSET = Pcal[2]*pow(2, 17) + dT*Pcal[4]/pow(2,6);
-  SENS = Pcal[1]*pow(2,16) + dT*Pcal[3]/pow(2,7);
-
-  Temperature = (2000 + (dT*Pcal[6])/pow(2, 23))/100;   // First-order Temperature in degrees celsius
-
-  // Second order corrections
-  if(Temperature > 20)
-  {
-    T2 = 5*dT*dT/pow(2, 38); // correction for high temperatures
-    OFFSET2 = 0;
-    SENS2 = 0;
+  if (!altInit || altitudeCount == 256) {
+    D1 = helper.MS5637Read(ADC_D1, OSR);  // get raw pressure value
+    D2 = helper.MS5637Read(ADC_D2, OSR);  // get raw temperature value
+    dT = D2 - Pcal[5]*pow(2,8);    // calculate temperature difference from reference
+    OFFSET = Pcal[2]*pow(2, 17) + dT*Pcal[4]/pow(2,6);
+    SENS = Pcal[1]*pow(2,16) + dT*Pcal[3]/pow(2,7);
+  
+    Temperature = (2000 + (dT*Pcal[6])/pow(2, 23))/100;   // First-order Temperature in degrees celsius
+  
+    // Second order corrections
+    if(Temperature > 20)
+    {
+      T2 = 5*dT*dT/pow(2, 38); // correction for high temperatures
+      OFFSET2 = 0;
+      SENS2 = 0;
+    }
+    if(Temperature < 20)       // correction for low temperature
+    {
+      T2      = 3*dT*dT/pow(2, 33);
+      OFFSET2 = 61*(100*Temperature - 2000)*(100*Temperature - 2000)/16;
+      SENS2   = 29*(100*Temperature - 2000)*(100*Temperature - 2000)/16;
+    }
+    if(Temperature < -15)      // correction for very low temperature
+    {
+      OFFSET2 = OFFSET2 + 17*(100*Temperature + 1500)*(100*Temperature + 1500);
+      SENS2 = SENS2 + 9*(100*Temperature + 1500)*(100*Temperature + 1500);
+    }
+    // End of second order corrections
+  
+    Temperature = Temperature - T2/100;
+    OFFSET = OFFSET - OFFSET2;
+    SENS = SENS - SENS2;
+  
+    Pressure = (((D1*SENS)/pow(2, 21) - OFFSET)/pow(2, 15))/100;  // Pressure in mbar or kPa
+  
+    altitudeBuffer = ((145366.45*(1.0 - pow((Pressure/1013.25), 0.190284)))/3.2808) - altitudeOffset; // Altitude calculation
+    altitudeCount = 0;
+  } else {
+    altitudeCount++;
   }
-  if(Temperature < 20)       // correction for low temperature
-  {
-    T2      = 3*dT*dT/pow(2, 33);
-    OFFSET2 = 61*(100*Temperature - 2000)*(100*Temperature - 2000)/16;
-    SENS2   = 29*(100*Temperature - 2000)*(100*Temperature - 2000)/16;
-  }
-  if(Temperature < -15)      // correction for very low temperature
-  {
-    OFFSET2 = OFFSET2 + 17*(100*Temperature + 1500)*(100*Temperature + 1500);
-    SENS2 = SENS2 + 9*(100*Temperature + 1500)*(100*Temperature + 1500);
-  }
-  // End of second order corrections
 
-  Temperature = Temperature - T2/100;
-  OFFSET = OFFSET - OFFSET2;
-  SENS = SENS - SENS2;
-
-  Pressure = (((D1*SENS)/pow(2, 21) - OFFSET)/pow(2, 15))/100;  // Pressure in mbar or kPa
-
-  return ((145366.45*(1.0 - pow((Pressure/1013.25), 0.190284)))/3.2808) - altitudeOffset; // Altitude calculation
+  return altitudeBuffer;
 }
 
 
@@ -274,9 +297,16 @@ void printData(String data) {
       dataFileName.toCharArray(fileNameBuffer, 20);
     }
 
-    datafile = SD.open(fileNameBuffer, FILE_WRITE);
-    datafile.print(data);
-    datafile.close();
+    writeCount++;
+    dataBuffer += data;
+    if (writeCount == 64) {
+      datafile = SD.open(fileNameBuffer, O_CREAT | O_WRITE);
+      datafile.print(dataBuffer);
+      datafile.close();
+
+      writeCount = 0;
+      dataBuffer = "";
+    }
   }
 }
 
