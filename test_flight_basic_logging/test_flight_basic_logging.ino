@@ -7,15 +7,28 @@
   This sketch is written for use on a Teensy 3.1/3.2
 
   The circuit:
-  * Components supplying input to device:
+  * Components supplying input:
     - 9-Axis motion sensor MPU9250 Shield
+      * Connected to the SMT pads on the underside of the Teensy
+    - Venus GPS logger
+      * RX     - pin 7
+      * TX     - pin 8
+      * Other pins connected to independent power supplies
   * Components Outputted to:
     - BOB-00544 microSD card SPI breakout
-      * SD card attached to SPI bus as follows:
-      ** MOSI - pin 11
-      ** MISO - pin 12
-      ** CLK - 13
-      ** CS - as defined in sdChipSelect field
+      * MOSI   - pin 11
+      * MISO   - pin 12
+      * CLK    - pin 13
+      * CS     - as defined in sdChipSelect field
+    - RFM22B-S2 434MHz radio tranciever
+      * SDI    - pin 11
+      * SDO    - pin 12
+      * CLK    - pin 13
+      * CS     - as defined in radioChipSelect field
+      * SDN    - pin 17
+      * RX-ANT - pin 18
+      * TX-ANT - pin 19
+   
 
 
   Created 13 May 2016
@@ -30,6 +43,14 @@
 #include <SD_t3.h>
 #include <SPI.h>
 #include <MPU9250_helper.h>
+#include <TinyGPS++.h>
+
+// REGION GPS
+#define gpsSerial Serial3
+
+TinyGPSPlus gps;
+boolean gpsLocked = false;
+// END REGION
 
 // REGION CONFIGURATION
 uint8_t OSR = ADC_8192;
@@ -38,9 +59,10 @@ int8_t Gscale = GFS_250DPS;
 int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
 int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
 
-boolean serialDebug = false;
+boolean serialDebug = true;
 
 const int sdChipSelect = 10;
+const int radioChipSelect = 9;
 // END REGION
 
 // REGION SENSOR FIELDS
@@ -83,6 +105,8 @@ String dataBuffer = "";
 MPU9250_helper helper(Ascale, Gscale, Mscale, Mmode);
 
 void setup() {
+  gpsSerial.begin(9600);
+  
   Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_29_30, I2C_PULLUP_EXT, I2C_RATE_400);
   
   if (serialDebug) {
@@ -95,9 +119,22 @@ void setup() {
   setupMPU9250();
   setupAK8963();
   setupMS5637();
-
+  
   // Block if not initialised properly (Also set LED state)
   while (!initialiseOK);
+
+  printData("\nGPS waiting on lock...\n");
+  long timeStarted = millis();
+  while (!gpsLocked) {
+    if (gpsSerial.available()) {
+      gps.encode(gpsSerial.read());
+    }
+    
+    if (gps.sentencesWithFix() > 0) {
+      printData("Lock took: " + String(millis() - timeStarted) + " ms\n\n");
+      gpsLocked = true;
+    }
+  }
   
   // finalise init logs
   initFileName.toCharArray(fileNameBuffer, 20);
@@ -112,6 +149,10 @@ void setup() {
 }
 
 void loop() {
+  if (gpsSerial.available()) {
+    gps.encode(gpsSerial.read());
+  }  
+  
   helper.readAccelData(accelCount);
   helper.readGyroData(gyroCount);
   helper.readMagData(magCount);
@@ -137,6 +178,9 @@ void loop() {
   printData(getLogString(ax, ay, az)+getLogString(gx, gy, gz)+getLogString(mx, my, mz));\
   printData(String(getAltitude()) + "," + String(millis()) + ",\n");
 
+  if (gps.location.isUpdated()) {
+    // TODO: Change this to utilise radio
+  }
 }
 
 void setupMPU9250() {
