@@ -131,7 +131,7 @@ void setup() {
     }
     
     if (gps.sentencesWithFix() > 0) {
-      printData("Lock took: " + String(millis() - timeStarted) + " ms\n\n");
+      printData("Lock took: " + String((millis() - timeStarted)/1000.0, 2) + " s\n\n");
       gpsLocked = true;
     }
   }
@@ -145,7 +145,7 @@ void setup() {
   
   // Initialise CSV columns
   isInitState = false;
-  printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_Y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,ALT,TIME,\n");
+  printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_Y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,ALT,GPS_LAT,GPS_LONG,GPS_ALT,TIME,\n");
 }
 
 void loop() {
@@ -176,7 +176,9 @@ void loop() {
   mz = (float)magCount[2]*mRes*magCalibration[2] - magbias[2];
 
   printData(getLogString(ax, ay, az)+getLogString(gx, gy, gz)+getLogString(mx, my, mz));\
-  printData(String(getAltitude()) + "," + String(millis()) + ",\n");
+  printData(String(getAltitude()) + ",");
+  printData(getGPSString());
+  printData(String(millis()) + ",\n");
 
   if (gps.location.isUpdated()) {
     // TODO: Change this to utilise radio
@@ -357,3 +359,8 @@ void printData(String data) {
 String getLogString(float x, float y, float z) {
   return (String(x, DEC) + "," + String(y, DEC) + "," + String(z, DEC) + ",");
 }
+
+String getGPSString() {
+  return (String(gps.location.lat()) + "," + String(gps.location.lng()) + "," + String(gps.altitude.meters()) + ",");
+}
+
