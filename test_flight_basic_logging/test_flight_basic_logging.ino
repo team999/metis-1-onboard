@@ -361,6 +361,6 @@ String getLogString(float x, float y, float z) {
 }
 
 String getGPSString() {
-  return (String(gps.location.lat()) + "," + String(gps.location.lng()) + "," + String(gps.altitude.meters()) + ",");
+  return (String(gps.location.lat(), 6) + "," + String(gps.location.lng(), 6) + "," + String(gps.altitude.meters()) + ",");
 }
 
