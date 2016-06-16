@@ -43,6 +43,14 @@
 #include <SD_t3.h>
 #include <SPI.h>
 #include <MPU9250_helper.h>
+#include <TinyGPS++.h>
+
+// REGION GPS
+#define gpsSerial Serial3
+
+TinyGPSPlus gps;
+boolean gpsLocked = false;
+// END REGION
 
 // REGION CONFIGURATION
 uint8_t OSR = ADC_8192;
@@ -51,7 +59,7 @@ int8_t Gscale = GFS_250DPS;
 int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
 int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
 
-boolean serialDebug = false;
+boolean serialDebug = true;
 
 const int sdChipSelect = 10;
 const int radioChipSelect = 9;
@@ -97,6 +105,8 @@ String dataBuffer = "";
 MPU9250_helper helper(Ascale, Gscale, Mscale, Mmode);
 
 void setup() {
+  gpsSerial.begin(9600);
+  
   Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_29_30, I2C_PULLUP_EXT, I2C_RATE_400);
   
   if (serialDebug) {
@@ -109,9 +119,22 @@ void setup() {
   setupMPU9250();
   setupAK8963();
   setupMS5637();
-
+  
   // Block if not initialised properly (Also set LED state)
   while (!initialiseOK);
+
+  printData("\nGPS waiting on lock...\n");
+  long timeStarted = millis();
+  while (!gpsLocked) {
+    if (gpsSerial.available()) {
+      gps.encode(gpsSerial.read());
+    }
+    
+    if (gps.sentencesWithFix() > 0) {
+      printData("Lock took: " + String((millis() - timeStarted)/1000.0, 2) + " s\n\n");
+      gpsLocked = true;
+    }
+  }
   
   // finalise init logs
   initFileName.toCharArray(fileNameBuffer, 20);
@@ -122,10 +145,14 @@ void setup() {
   
   // Initialise CSV columns
   isInitState = false;
-  printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_Y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,ALT,TIME,\n");
+  printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_Y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,ALT,GPS_LAT,GPS_LONG,GPS_ALT,TIME,\n");
 }
 
 void loop() {
+  if (gpsSerial.available()) {
+    gps.encode(gpsSerial.read());
+  }  
+  
   helper.readAccelData(accelCount);
   helper.readGyroData(gyroCount);
   helper.readMagData(magCount);
@@ -149,8 +176,13 @@ void loop() {
   mz = (float)magCount[2]*mRes*magCalibration[2] - magbias[2];
 
   printData(getLogString(ax, ay, az)+getLogString(gx, gy, gz)+getLogString(mx, my, mz));\
-  printData(String(getAltitude()) + "," + String(millis()) + ",\n");
+  printData(String(getAltitude()) + ",");
+  printData(getGPSString());
+  printData(String(millis()) + ",\n");
 
+  if (gps.location.isUpdated()) {
+    // TODO: Change this to utilise radio
+  }
 }
 
 void setupMPU9250() {
@@ -327,3 +359,8 @@ void printData(String data) {
 String getLogString(float x, float y, float z) {
   return (String(x, DEC) + "," + String(y, DEC) + "," + String(z, DEC) + ",");
 }
+
+String getGPSString() {
+  return (String(gps.location.lat(), 6) + "," + String(gps.location.lng(), 6) + "," + String(gps.altitude.meters()) + ",");
+}
+
