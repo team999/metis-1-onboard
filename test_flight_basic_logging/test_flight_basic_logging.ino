@@ -44,25 +44,23 @@
 #include <SPI.h>
 #include <MPU9250_helper.h>
 #include <TinyGPS++.h>
+#include <RF22.h>
+
+// REGION RFM22B
+#define RCS 9
+#define radioIntPin 0
+
+RF22 rf22(RCS, radioIntPin);
+
+
+uint8_t radioDataBuffer[64];
+// END REGION
 
 // REGION GPS
 #define gpsSerial Serial3
 
 TinyGPSPlus gps;
 boolean gpsLocked = false;
-// END REGION
-
-// REGION CONFIGURATION
-uint8_t OSR = ADC_8192;
-int8_t Ascale = AFS_16G;
-int8_t Gscale = GFS_250DPS;
-int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
-int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
-
-boolean serialDebug = true;
-
-const int sdChipSelect = 10;
-const int radioChipSelect = 9;
 // END REGION
 
 // REGION SENSOR FIELDS
@@ -102,10 +100,27 @@ int writeCount = 0;
 String dataBuffer = "";
 // END REGION
 
+// REGION CONFIGURATION
+uint8_t OSR = ADC_8192;
+int8_t Ascale = AFS_16G;
+int8_t Gscale = GFS_250DPS;
+int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
+int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
+
+boolean serialDebug = false;
+
+const int sdChipSelect = 10;
+const int radioChipSelect = 9;
+// END REGION
+
 MPU9250_helper helper(Ascale, Gscale, Mscale, Mmode);
 
 void setup() {
   gpsSerial.begin(9600);
+  
+  pinMode(radioIntPin, INPUT);
+  pinMode(9, OUTPUT);
+  pinMode(10, OUTPUT);
   
   Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_29_30, I2C_PULLUP_EXT, I2C_RATE_400);
   
@@ -119,6 +134,7 @@ void setup() {
   setupMPU9250();
   setupAK8963();
   setupMS5637();
+  setupRFM22B();
   
   // Block if not initialised properly (Also set LED state)
   while (!initialiseOK);
@@ -181,9 +197,13 @@ void loop() {
   printData(String(millis()) + ",\n");
 
   if (gps.location.isUpdated()) {
-    // TODO: Change this to utilise radio
+    sendViaRadio(getGPSString());
   }
 }
+
+// -------------------------------------------------
+//                 Setup functions
+// -------------------------------------------------
 
 void setupMPU9250() {
   printData("Reading who-am-i byte of MPU9250\n");
@@ -238,7 +258,7 @@ void setupSD() {
   } else {
     // Detect init file on card
     // Same number of init files as there are data files
-    Serial.println("Initialising card");
+    printData("Initialising card");
     int fileCount = 1;
     (initFileName + String(fileCount) + ".txt").toCharArray(fileNameBuffer, 20);
     while(SD.exists(fileNameBuffer)) {
@@ -283,6 +303,19 @@ void setupMS5637(){
   altitudeOffset = altitudeTemp/16;
   altInit = true;
 }
+
+void setupRFM22B() {
+  if (!rf22.init()) {
+    initialiseOK = false;
+    printData("\nRFM22B failed to initialise\n");
+  } else {
+    printData("\nRFM22B initialisation success\n");
+  }
+}
+
+// -------------------------------------------------
+//              Data processing functions
+// -------------------------------------------------
 
 float getAltitude(){
   if (!altInit || altitudeCount == 256) {
@@ -329,6 +362,13 @@ float getAltitude(){
   return altitudeBuffer;
 }
 
+String getLogString(float x, float y, float z) {
+  return (String(x, DEC) + "," + String(y, DEC) + "," + String(z, DEC) + ",");
+}
+
+String getGPSString() {
+  return (String(gps.location.lat(), 6) + "," + String(gps.location.lng(), 6) + "," + String(gps.altitude.meters()) + ",");
+}
 
 // -------------------------------------------------
 //                Utility functions
@@ -356,11 +396,20 @@ void printData(String data) {
   }
 }
 
-String getLogString(float x, float y, float z) {
-  return (String(x, DEC) + "," + String(y, DEC) + "," + String(z, DEC) + ",");
+boolean sendViaRadio(String dataString) {
+  getArrayFromString(dataString, radioDataBuffer);
+  boolean success = rf22.send(radioDataBuffer, sizeof(radioDataBuffer));
+  if (success) {
+    rf22.waitPacketSent();
+  }
+  return success;
 }
 
-String getGPSString() {
-  return (String(gps.location.lat(), 6) + "," + String(gps.location.lng(), 6) + "," + String(gps.altitude.meters()) + ",");
+void getArrayFromString(String in, uint8_t * dest) {
+  uint8_t out[in.length()];
+  for (uint8_t i = 0; i < in.length(); i++) {
+    out[i] = (uint8_t) in.charAt(i);
+  }
+  dest = out;
 }
 
