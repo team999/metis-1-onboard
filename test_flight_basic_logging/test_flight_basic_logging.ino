@@ -28,19 +28,18 @@
       * SDN    - pin 17
       * RX-ANT - pin 18
       * TX-ANT - pin 19
-   
+
 
 
   Created 13 May 2016
   By Jamie Sanson
 
-  Modified 12 June 2016
+  Modified 8 July 2016
   By Jamie Sanson
 
 */
 #include <i2c_t3.h>
 #include <SD.h>
-#include <SD_t3.h>
 #include <SPI.h>
 #include <MPU9250_helper.h>
 #include <TinyGPS++.h>
@@ -49,9 +48,7 @@
 // REGION RFM22B
 #define RCS 9
 #define radioIntPin 0
-
 RF22 rf22(RCS, radioIntPin);
-
 
 uint8_t radioDataBuffer[64];
 // END REGION
@@ -107,7 +104,7 @@ int8_t Gscale = GFS_250DPS;
 int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
 int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
 
-boolean serialDebug = false;
+boolean serialDebug = true;
 
 const int sdChipSelect = 10;
 const int radioChipSelect = 9;
@@ -115,60 +112,102 @@ const int radioChipSelect = 9;
 
 MPU9250_helper helper(Ascale, Gscale, Mscale, Mmode);
 
+
+char data[30];
+
+
 void setup() {
   gpsSerial.begin(9600);
-  
-  pinMode(radioIntPin, INPUT);
-  pinMode(9, OUTPUT);
+
+  pinMode(RCS, OUTPUT);
   pinMode(10, OUTPUT);
-  
-  Wire1.begin(I2C_MASTER, 0x00, I2C_PINS_29_30, I2C_PULLUP_EXT, I2C_RATE_400);
-  
+  pinMode(radioIntPin, INPUT);
+  Wire1.begin(I2C_MASTER, 0x000, I2C_PINS_29_30, I2C_PULLUP_EXT, I2C_RATE_400);
+
   if (serialDebug) {
     // block until serial sent to micro
     Serial.begin(115200);
+    
     while(!Serial.available()){}
   }
 
+  
+  setupRFM22B();  
   setupSD();
+  delay(100);
+
+  printData("\nBeginning radio test:\n");
+
+  // For loop to send radio signal when SPI devices initialised.
+  // Carrier should be detectable if initialisation is successful.
+  // Total iteration should take just over 30 seconds.
+  for (int it = 0; it < 6; it++) {
+    rf22.spiWrite(0x07, 0x08); // turn tx on
+    delay(5000);
+    String toSend = "$$$$radio_init";
+    toSend.toCharArray(data, 30);
+    rtty_txstring(data);
+    rf22.spiWrite(0x07, 0x01); // turn tx off
+    printData("Sent signal " + String(it) + " successfully\n");
+  }
+                        
   setupMPU9250();
   setupAK8963();
   setupMS5637();
-  setupRFM22B();
+
+  // Sends another 6 messages stating whether or not initialisation succeeded
+  for (int it = 0; it < 6; it++) {
+    rf22.spiWrite(0x07, 0x08); // turn tx on
+    delay(5000);
+    String temp = "$$$$initOK_" + initialiseOK ? "true" : "false";
+    temp.toCharArray(data, 30);
+    rtty_txstring(data);
+    rf22.spiWrite(0x07, 0x01); // turn tx off
+  }
   
   // Block if not initialised properly (Also set LED state)
   while (!initialiseOK);
-
+  
   printData("\nGPS waiting on lock...\n");
   long timeStarted = millis();
   while (!gpsLocked) {
     if (gpsSerial.available()) {
       gps.encode(gpsSerial.read());
     }
-    
+
     if (gps.sentencesWithFix() > 0) {
       printData("Lock took: " + String((millis() - timeStarted)/1000.0, 2) + " s\n\n");
       gpsLocked = true;
     }
   }
-  
+
   // finalise init logs
   initFileName.toCharArray(fileNameBuffer, 20);
   datafile = SD.open(fileNameBuffer, O_CREAT | O_WRITE);
   datafile.print(dataBuffer);
   datafile.close();
   dataBuffer = "";
-  
+
   // Initialise CSV columns
   isInitState = false;
   printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_Y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,ALT,GPS_LAT,GPS_LONG,GPS_ALT,TIME,\n");
+
+  // Finally, transmit another 6 messages stating if we're good to go
+  for (int it = 0; it < 6; it++) {
+    rf22.spiWrite(0x07, 0x08); // turn tx on
+    delay(5000);
+    String toSend = "$$$$launchInitOk";
+    toSend.toCharArray(data, 30);
+    rtty_txstring(data);
+    rf22.spiWrite(0x07, 0x01); // turn tx off
+  }
 }
 
 void loop() {
   if (gpsSerial.available()) {
     gps.encode(gpsSerial.read());
-  }  
-  
+  }
+
   helper.readAccelData(accelCount);
   helper.readGyroData(gyroCount);
   helper.readMagData(magCount);
@@ -197,7 +236,7 @@ void loop() {
   printData(String(millis()) + ",\n");
 
   if (gps.location.isUpdated()) {
-    sendViaRadio(getGPSString());
+    sendGPSData(gps.location.lat(), gps.location.lng());
   }
 }
 
@@ -258,7 +297,7 @@ void setupSD() {
   } else {
     // Detect init file on card
     // Same number of init files as there are data files
-    printData("Initialising card");
+    printData("Initialising card\n");
     int fileCount = 1;
     (initFileName + String(fileCount) + ".txt").toCharArray(fileNameBuffer, 20);
     while(SD.exists(fileNameBuffer)) {
@@ -267,6 +306,7 @@ void setupSD() {
     }
     initFileName = initFileName + String(fileCount) + ".txt";
     dataFileName = dataFileName + String(fileCount) + ".csv";
+    Serial.println(initFileName + " , " + dataFileName);
   }
 }
 
@@ -309,6 +349,10 @@ void setupRFM22B() {
     initialiseOK = false;
     printData("\nRFM22B failed to initialise\n");
   } else {
+    rf22.setModeTx(); // Turns off Rx
+    rf22.setTxPower(RF22_TXPOW_8DBM);
+    rf22.setModemConfig(RF22::UnmodulatedCarrier);
+    delay(100);
     printData("\nRFM22B initialisation success\n");
   }
 }
@@ -324,9 +368,9 @@ float getAltitude(){
     dT = D2 - Pcal[5]*pow(2,8);    // calculate temperature difference from reference
     OFFSET = Pcal[2]*pow(2, 17) + dT*Pcal[4]/pow(2,6);
     SENS = Pcal[1]*pow(2,16) + dT*Pcal[3]/pow(2,7);
-  
+
     Temperature = (2000 + (dT*Pcal[6])/pow(2, 23))/100;   // First-order Temperature in degrees celsius
-  
+
     // Second order corrections
     if(Temperature > 20)
     {
@@ -346,13 +390,13 @@ float getAltitude(){
       SENS2 = SENS2 + 9*(100*Temperature + 1500)*(100*Temperature + 1500);
     }
     // End of second order corrections
-  
+
     Temperature = Temperature - T2/100;
     OFFSET = OFFSET - OFFSET2;
     SENS = SENS - SENS2;
-  
+
     Pressure = (((D1*SENS)/pow(2, 21) - OFFSET)/pow(2, 15))/100;  // Pressure in mbar or kPa
-  
+
     altitudeBuffer = ((145366.45*(1.0 - pow((Pressure/1013.25), 0.190284)))/3.2808) - altitudeOffset; // Altitude calculation
     altitudeCount = 0;
   } else {
@@ -368,6 +412,19 @@ String getLogString(float x, float y, float z) {
 
 String getGPSString() {
   return (String(gps.location.lat(), 6) + "," + String(gps.location.lng(), 6) + "," + String(gps.altitude.meters()) + ",");
+}
+
+void sendGPSData(float lat, float lng) {
+  int diff = (int) lat;
+  float newLat = lat - (float) diff;
+  diff = (int) lng;
+  float newLng = lng - (float) diff;
+
+  rf22.spiWrite(0x07, 0x08); // turn tx on
+  delay(500);
+  sendViaRadio("$$$$");
+  sendViaRadio(String(newLat, 6) + "," + String(newLng, 6));
+  rf22.spiWrite(0x07, 0x01); // turn tx off
 }
 
 // -------------------------------------------------
@@ -386,7 +443,7 @@ void printData(String data) {
     writeCount++;
     dataBuffer += data;
     if (writeCount == 64) {
-      datafile = SD.open(fileNameBuffer, O_CREAT | O_WRITE);
+      datafile = SD.open(fileNameBuffer, FILE_WRITE);
       datafile.print(dataBuffer);
       datafile.close();
 
@@ -397,19 +454,63 @@ void printData(String data) {
 }
 
 boolean sendViaRadio(String dataString) {
-  getArrayFromString(dataString, radioDataBuffer);
-  boolean success = rf22.send(radioDataBuffer, sizeof(radioDataBuffer));
-  if (success) {
-    rf22.waitPacketSent();
-  }
-  return success;
+  dataString.toCharArray(data, 30);
+  rtty_txstring(data);
+  return true;
 }
 
-void getArrayFromString(String in, uint8_t * dest) {
-  uint8_t out[in.length()];
-  for (uint8_t i = 0; i < in.length(); i++) {
-    out[i] = (uint8_t) in.charAt(i);
+// RTTY Functions - from RJHARRISON's AVR Code
+void rtty_txstring (char * string)
+{
+
+  /* Simple function to sent a char at a time to
+  ** rtty_txbyte function.
+  ** NB Each char is one byte (8 Bits)
+  */
+  char c;
+  c = *string++;
+  while ( c != '\0') {
+    rtty_txbyte (c);
+    c = *string++;
   }
-  dest = out;
 }
 
+void rtty_txbyte (char c)
+{
+  /* Simple function to sent each bit of a char to
+  ** rtty_txbit function.
+  ** NB The bits are sent Least Significant Bit first
+  **
+  ** All chars should be preceded with a 0 and
+  ** proceded with a 1. 0 = Start bit; 1 = Stop bit
+  **
+  ** ASCII_BIT = 7 or 8 for ASCII-7 / ASCII-8
+  */
+  int i;
+  rtty_txbit (0); // Start bit
+  // Send bits for for char LSB first
+  for (i=0;i<8;i++)
+  {
+    if (c & 1) {
+      rtty_txbit(1);
+    } else {
+      rtty_txbit(0);
+    }
+    c = c >> 1;
+  }
+  rtty_txbit (1); // Stop bit
+  rtty_txbit (1); // Stop bit
+}
+
+void rtty_txbit (int bit)
+{
+    if (bit)
+    {
+      rf22.setFrequency(434.2010);
+    }
+    else
+    {
+       rf22.setFrequency(434.2015);
+    }
+    delayMicroseconds(10000); // 10000 = 100 BAUD 20150
+}
