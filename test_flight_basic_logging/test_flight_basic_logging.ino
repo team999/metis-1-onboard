@@ -8,6 +8,8 @@
 
   The circuit:
   * Components supplying input:
+    - Momentary switch 
+      * Measurement - pin 2
     - 9-Axis motion sensor MPU9250 Shield
       * Connected to the SMT pads on the underside of the Teensy
     - Venus GPS logger
@@ -34,7 +36,7 @@
   Created 13 May 2016
   By Jamie Sanson
 
-  Modified 8 July 2016
+  Modified 15 July 2016
   By Jamie Sanson
 
 */
@@ -48,6 +50,7 @@
 // REGION RFM22B
 #define RCS 9
 #define radioIntPin 0
+#define buttonPin 2
 RF22 rf22(RCS, radioIntPin);
 
 uint8_t radioDataBuffer[64];
@@ -104,7 +107,7 @@ int8_t Gscale = GFS_250DPS;
 int8_t Mscale = MFS_16BITS;  // Choose either 14-bit or 16-bit magnetometer resolution
 int8_t Mmode = 0x02; // 2 for 8Hz, 6 for 100Hz continuous
 
-boolean serialDebug = true;
+boolean serialDebug = false;
 
 const int sdChipSelect = 10;
 const int radioChipSelect = 9;
@@ -112,9 +115,11 @@ const int radioChipSelect = 9;
 
 MPU9250_helper helper(Ascale, Gscale, Mscale, Mmode);
 
-
 char data[30];
 
+// GPS sending flag
+boolean isPostApogee = false;
+long flightStartTime;
 
 void setup() {
   gpsSerial.begin(9600);
@@ -122,6 +127,7 @@ void setup() {
   pinMode(RCS, OUTPUT);
   pinMode(10, OUTPUT);
   pinMode(radioIntPin, INPUT);
+  pinMode(buttonPin, INPUT);
   Wire1.begin(I2C_MASTER, 0x000, I2C_PINS_29_30, I2C_PULLUP_EXT, I2C_RATE_400);
 
   if (serialDebug) {
@@ -129,9 +135,10 @@ void setup() {
     Serial.begin(115200);
     
     while(!Serial.available()){}
-  }
+  } 
 
-  
+  while (!digitalRead(buttonPin));
+
   setupRFM22B();  
   setupSD();
   delay(100);
@@ -141,7 +148,7 @@ void setup() {
   // For loop to send radio signal when SPI devices initialised.
   // Carrier should be detectable if initialisation is successful.
   // Total iteration should take just over 30 seconds.
-  for (int it = 0; it < 6; it++) {
+  for (int it = 0; it < 3; it++) {
     rf22.spiWrite(0x07, 0x08); // turn tx on
     delay(5000);
     String toSend = "$$$$radio_init";
@@ -155,14 +162,19 @@ void setup() {
   setupAK8963();
   setupMS5637();
 
+  printData("Sending initOk message:\n");
+
   // Sends another 6 messages stating whether or not initialisation succeeded
-  for (int it = 0; it < 6; it++) {
+  for (int it = 0; it < 3; it++) {
     rf22.spiWrite(0x07, 0x08); // turn tx on
     delay(5000);
-    String temp = "$$$$initOK_" + initialiseOK ? "true" : "false";
+    String temp = "$$$$initOK_";
+    temp += initialiseOK ? "true" : "false";
     temp.toCharArray(data, 30);
     rtty_txstring(data);
     rf22.spiWrite(0x07, 0x01); // turn tx off
+
+    printData("Sent signal " + String(it) + " successfully\n");
   }
   
   // Block if not initialised properly (Also set LED state)
@@ -193,7 +205,7 @@ void setup() {
   printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_Y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,ALT,GPS_LAT,GPS_LONG,GPS_ALT,TIME,\n");
 
   // Finally, transmit another 6 messages stating if we're good to go
-  for (int it = 0; it < 6; it++) {
+  for (int it = 0; it < 3; it++) {
     rf22.spiWrite(0x07, 0x08); // turn tx on
     delay(5000);
     String toSend = "$$$$launchInitOk";
@@ -204,6 +216,16 @@ void setup() {
 }
 
 void loop() {
+  if (isPostApogee) {
+    sendGPSData(gps.location.lat(), gps.location.lng());
+  } else {
+    runPreApogeeIteration();
+
+    isPostApogee = (flightStartTime > 0) && ((millis() - flightStartTime) > 25000); // start sending GPS after 25 seconds
+  }
+}
+
+void runPreApogeeIteration() {
   if (gpsSerial.available()) {
     gps.encode(gpsSerial.read());
   }
@@ -220,6 +242,10 @@ void loop() {
   ay = (float)accelCount[1]*aRes;
   az = (float)accelCount[2]*aRes;
 
+  if (ay <= -3.0 && flightStartTime == 0) { // Start timer when pulling more than 3.0G 
+    flightStartTime = millis();
+  }
+
   gx = (float)gyroCount[0]*gRes;
   gy = (float)gyroCount[1]*gRes;
   gz = (float)gyroCount[2]*gRes;
@@ -234,10 +260,6 @@ void loop() {
   printData(String(getAltitude()) + ",");
   printData(getGPSString());
   printData(String(millis()) + ",\n");
-
-  if (gps.location.isUpdated()) {
-    sendGPSData(gps.location.lat(), gps.location.lng());
-  }
 }
 
 // -------------------------------------------------
