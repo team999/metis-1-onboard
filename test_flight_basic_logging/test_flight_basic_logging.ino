@@ -9,7 +9,7 @@
   The circuit:
   * Components supplying input:
     - Momentary switch 
-      * Measurement - pin 2
+      * Measurement - pin 1
     - 9-Axis motion sensor MPU9250 Shield
       * Connected to the SMT pads on the underside of the Teensy
     - Venus GPS logger
@@ -50,7 +50,7 @@
 // REGION RFM22B
 #define RCS 9
 #define radioIntPin 0
-#define buttonPin 2
+#define buttonPin 1
 RF22 rf22(RCS, radioIntPin);
 
 uint8_t radioDataBuffer[64];
@@ -139,8 +139,9 @@ void setup() {
 
   while (!digitalRead(buttonPin));
 
-  setupRFM22B();  
+  setupRFM22B(); 
   setupSD();
+  
   delay(100);
 
   printData("\nBeginning radio test:\n");
@@ -157,31 +158,11 @@ void setup() {
     rf22.spiWrite(0x07, 0x01); // turn tx off
     printData("Sent signal " + String(it) + " successfully\n");
   }
-                        
-  setupMPU9250();
-  setupAK8963();
-  setupMS5637();
 
-  printData("Sending initOk message:\n");
-
-  // Sends another 6 messages stating whether or not initialisation succeeded
-  for (int it = 0; it < 3; it++) {
-    rf22.spiWrite(0x07, 0x08); // turn tx on
-    delay(5000);
-    String temp = "$$$$initOK_";
-    temp += initialiseOK ? "true" : "false";
-    temp.toCharArray(data, 30);
-    rtty_txstring(data);
-    rf22.spiWrite(0x07, 0x01); // turn tx off
-
-    printData("Sent signal " + String(it) + " successfully\n");
-  }
-  
-  // Block if not initialised properly (Also set LED state)
-  while (!initialiseOK);
-  
   printData("\nGPS waiting on lock...\n");
+
   long timeStarted = millis();
+  
   while (!gpsLocked) {
     if (gpsSerial.available()) {
       gps.encode(gpsSerial.read());
@@ -193,18 +174,43 @@ void setup() {
     }
   }
 
+  sendGPSData(gps.location.lat(), gps.location.lng());
+
+  printData("Sending gpsOk message:\n");
+
+  // Sends another 3 messages stating whether or not initialisation succeeded
+  for (int it = 0; it < 3; it++) {
+    rf22.spiWrite(0x07, 0x08); // turn tx on
+    delay(5000);
+    String temp = "$$$$gpsLocked";
+    temp.toCharArray(data, 30);
+    rtty_txstring(data);
+    rf22.spiWrite(0x07, 0x01); // turn tx off
+
+    printData("Sent signal " + String(it) + " successfully\n");
+  }
+
+  setupMPU9250();
+  setupAK8963();
+  setupMS5637();
+  
+  while (!initialiseOK);
+
+  printData("\nFinalising init logs and beginning main iteration"); 
+  
   // finalise init logs
   initFileName.toCharArray(fileNameBuffer, 20);
   datafile = SD.open(fileNameBuffer, O_CREAT | O_WRITE);
   datafile.print(dataBuffer);
   datafile.close();
   dataBuffer = "";
+  writeCount = 0;
 
   // Initialise CSV columns
   isInitState = false;
   printData("ACCEL_X,ACCEL_Y,ACCEL_Z,GYRO_X,GYRO_Y,GYRO_Z,MAG_X,MAG_Y,MAG_Z,ALT,GPS_LAT,GPS_LONG,GPS_ALT,TIME,\n");
 
-  // Finally, transmit another 6 messages stating if we're good to go
+  // Finally, transmit another 3 messages stating if we're good to go
   for (int it = 0; it < 3; it++) {
     rf22.spiWrite(0x07, 0x08); // turn tx on
     delay(5000);
@@ -213,6 +219,8 @@ void setup() {
     rtty_txstring(data);
     rf22.spiWrite(0x07, 0x01); // turn tx off
   }
+
+  flightStartTime = millis();
 }
 
 void loop() {
@@ -242,7 +250,7 @@ void runPreApogeeIteration() {
   ay = (float)accelCount[1]*aRes;
   az = (float)accelCount[2]*aRes;
 
-  if (ay <= -3.0 && flightStartTime == 0) { // Start timer when pulling more than 3.0G 
+  if (ay < -2.0 && flightStartTime == 0) { // Start timer when pulling more than 3.0G 
     flightStartTime = millis();
   }
 
@@ -437,15 +445,13 @@ String getGPSString() {
 }
 
 void sendGPSData(float lat, float lng) {
-  int diff = (int) lat;
-  float newLat = lat - (float) diff;
-  diff = (int) lng;
-  float newLng = lng - (float) diff;
-
   rf22.spiWrite(0x07, 0x08); // turn tx on
-  delay(500);
-  sendViaRadio("$$$$");
-  sendViaRadio(String(newLat, 6) + "," + String(newLng, 6));
+  delay(1000);
+  String temp = "$$$$";
+  String gpsString = String(lat, 10) + "," + String(lng, 10);
+  temp += gpsString;
+  temp.toCharArray(data, 30);
+  rtty_txstring(data);
   rf22.spiWrite(0x07, 0x01); // turn tx off
 }
 
