@@ -8,7 +8,7 @@
 
   The circuit:
   * Components supplying input:
-    - Momentary switch 
+    - Momentary switch
       * Measurement - pin 1
     - 9-Axis motion sensor MPU9250 Shield
       * Connected to the SMT pads on the underside of the Teensy
@@ -28,8 +28,8 @@
       * CLK    - pin 13
       * CS     - as defined in radioChipSelect field
       * SDN    - pin 17
-      * RX-ANT - pin 18
-      * TX-ANT - pin 19
+      * RX-ANT - ground - as we are always in TX mode
+      * TX-ANT - vcc (3.3v) - As we are always in TX mode
 
 
 
@@ -133,15 +133,15 @@ void setup() {
   if (serialDebug) {
     // block until serial sent to micro
     Serial.begin(115200);
-    
+
     while(!Serial.available()){}
-  } 
+  }
 
   while (!digitalRead(buttonPin));
 
-  setupRFM22B(); 
+  setupRFM22B();
   setupSD();
-  
+
   delay(100);
 
   printData("\nBeginning radio test:\n");
@@ -162,7 +162,7 @@ void setup() {
   printData("\nGPS waiting on lock...\n");
 
   long timeStarted = millis();
-  
+
   while (!gpsLocked) {
     if (gpsSerial.available()) {
       gps.encode(gpsSerial.read());
@@ -193,11 +193,11 @@ void setup() {
   setupMPU9250();
   setupAK8963();
   setupMS5637();
-  
+
   while (!initialiseOK);
 
-  printData("\nFinalising init logs and beginning main iteration"); 
-  
+  printData("\nFinalising init logs and beginning main iteration");
+
   // finalise init logs
   initFileName.toCharArray(fileNameBuffer, 20);
   datafile = SD.open(fileNameBuffer, O_CREAT | O_WRITE);
@@ -250,7 +250,7 @@ void runPreApogeeIteration() {
   ay = (float)accelCount[1]*aRes;
   az = (float)accelCount[2]*aRes;
 
-  if (ay < -2.0 && flightStartTime == 0) { // Start timer when pulling more than 3.0G 
+  if (ay < -2.0 && flightStartTime == 0) { // Start timer when pulling more than 3.0G
     flightStartTime = millis();
   }
 
